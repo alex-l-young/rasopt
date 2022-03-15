@@ -1,0 +1,13 @@
+.DS_Store
+RAS_507_linux/Secchia/*.tiff
+RAS_507_linux/Muncie_Linux
+RAS_507_linux/Secchia/Secchia_Panaro.p23.hdf
+RAS_507_linux/Secchia/tmp_files
+RAS_507_linux/Secchia/Original_Inputs
+*.png
+.idea/
+Bayesian_Optimization/Output_Files
+.ipynb_checkpoints/*
+*.pyc
+*Geo_Files/
+*.asv
