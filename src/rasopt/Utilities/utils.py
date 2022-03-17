@@ -36,7 +36,7 @@ except:
 
 
 # Local imports.
-import land_cover_utils
+from rasopt.Utilities import land_cover_utils
 
 # ==========================================================================================
 # UTILITY FUNCTIONS

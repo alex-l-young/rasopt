@@ -6,11 +6,13 @@ import h5py
 import geojson
 import os
 import osgeo, ogr
+from osgeo import gdal
 import rasterio
+from rasterio.enums import Resampling
 import subprocess
 
 # Local imports.
-import utils
+from rasopt.Utilities import utils
 
 # Functions
 
@@ -38,9 +40,9 @@ def percent_land_covers(land_cover_raster, land_cover_dict, cell_ids, cell_coord
     :return:
     """
 
-
 def terrain_water_depth(dem_fp, plan_hdf_fp, cell_fp_idx_path, facepoint_coord_path, depth_path, cell_coord_path,
-                                      timestep, out_fname_prefix='', nodata=-999.0):
+                                      timestep, out_fname_prefix='', nodata=-999.0, cleanup_rasters=False,
+                        resample=1.0):
     """
     Computes the water depth at each cell in the terrain file.
     :param dem_fp: Path to the DEM file.
@@ -72,7 +74,32 @@ def terrain_water_depth(dem_fp, plan_hdf_fp, cell_fp_idx_path, facepoint_coord_p
         dem_array = ds.read(1)
         dem_crs = ds.crs
 
+        # Resampling the DEM raster.
+        if resample != 1:
+            # resample data to target shape
+            dem_array = ds.read(
+                out_shape=(
+                    ds.count,
+                    int(ds.height * resample),
+                    int(ds.width * resample)
+                ),
+                resampling=Resampling.bilinear
+            )
+
+            # scale image transform
+            transform = ds.transform * ds.transform.scale(
+                (ds.width / dem_array.shape[-1]),
+                (ds.height / dem_array.shape[-2])
+            )
+
+            # Reduce array to 2D.
+            dem_array = np.squeeze(dem_array)
+
+            cell_width_X = transform[0]
+            cell_width_Y = -transform[4]
+
     # Raster path.
+    print('DEM SHAPE', dem_array.shape)
     raster_fp = os.path.join(cur_dir, 'Geo_Files', f'mesh_raster_{timestep}.tif')
 
     # Rasterize the geojson feature collection.
@@ -94,9 +121,6 @@ def terrain_water_depth(dem_fp, plan_hdf_fp, cell_fp_idx_path, facepoint_coord_p
     depth_array = raster_array - dem_array
     depth_array[depth_array < 0] = 0
     depth_array[depth_array > 100] = 0 # Handle no data value from dem_array causing extremely large values.
-    # with rasterio.open(dem_fp, 'r') as ds:
-    #     transform = ds.transform
-    #     dem_crs = ds.crs
 
     # Raster path.
     depth_raster_fp = os.path.join(cur_dir, 'Geo_Files', out_fname_prefix + f'depth_raster_{timestep}.tif')
@@ -116,8 +140,12 @@ def terrain_water_depth(dem_fp, plan_hdf_fp, cell_fp_idx_path, facepoint_coord_p
 
     print(raster_array.shape)
 
-    return depth_array, depth_raster_fp
+    # Delete rasters to save space.
+    if cleanup_rasters is True:
+        os.remove(depth_raster_fp)
+        os.remove(raster_fp)
 
+    return depth_array, depth_raster_fp
 
 
 if __name__ == '__main__':
@@ -141,7 +169,7 @@ if __name__ == '__main__':
 
     timestep = 120
 
-    raster, raster_fp = terrain_water_depth(dem_fp, plan_hdf_fp, cell_facepoint_idx_path, facepoint_coord_path, depth_path, cell_coord_path,
+    raster, raster_fp = terrain_water_depth_memory(dem_fp, plan_hdf_fp, cell_facepoint_idx_path, facepoint_coord_path, depth_path, cell_coord_path,
                                       timestep, out_fname_prefix='HEC_GT')
 
     print(raster_fp)
