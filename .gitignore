@@ -11,3 +11,4 @@ Bayesian_Optimization/Output_Files
 *.pyc
 *Geo_Files/
 *.asv
+Data/*
