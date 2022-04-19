@@ -12,3 +12,4 @@ Bayesian_Optimization/Output_Files
 *Geo_Files/
 *.asv
 Data/*
+*.egg-info

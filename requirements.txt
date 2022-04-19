@@ -1,0 +1,5 @@
+--index-url https://pypi.python.org/simple/
+
+./whls/GDAL-3.4.2-cp39-cp39-win_amd64.whl
+./whls/rasterio-1.2.10-cp39-cp39-win_amd64.whl
+-e .
