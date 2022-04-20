@@ -5,7 +5,7 @@ import numpy as np
 import h5py
 import geojson
 import os
-import osgeo, ogr
+import osgeo
 from osgeo import gdal
 import rasterio
 from rasterio.enums import Resampling
