@@ -14,3 +14,4 @@ Bayesian_Optimization/Output_Files
 Data/*
 *src/rasopt.egg-info/*
 *src/rasopt_alex_l_young.egg-info/*
+/src/rasopt.egg-info/

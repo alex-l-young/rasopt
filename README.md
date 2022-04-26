@@ -5,6 +5,18 @@ a suite of optimization algorithms, both out-of-the-box or user supplied. At it'
 creates an environment that facilitates easy running of the HEC-RAS model in a programmatic 
 way, thus sidestepping the cumbersome GUI that is required to run HEC-RAS normally. 
 
+### Installation
+To install rasopt, run the following within a virtual environment of choice.
+
+```
+c:\> git clone https://github.com/alex-l-young/rasopt
+
+c:\> cd rasopt
+
+c:\rasopt> pip install .
+```
+
+
 ### Required Libraries
 rascontrol - rascontrol is not on PyPI and so must be installed separately using the following commands.
 
