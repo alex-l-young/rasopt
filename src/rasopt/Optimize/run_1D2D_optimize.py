@@ -111,12 +111,6 @@ uncertainty_type = cfg['model_2d']['uncertainty_type']
 # Maximum error probability for flipping cells to a spurious value.
 max_probability = cfg['model_2d']['max_probability']
 
-# Number of hours to run model.
-n_ts = cfg['model_2d']['n_ts']
-
-# Mapping interval in minutes.
-map_interval = cfg['model_2d']['map_interval']
-
 # <<< Optimization Configurations >>>
 # -----------------------------------
 
@@ -124,7 +118,13 @@ map_interval = cfg['model_2d']['map_interval']
 nstarts = cfg['optim']['nstarts']
 
 # Number of evaluations.
-nevals = cfg['optim']['nstarts']
+nevals = cfg['optim']['nevals']
+
+# Number of hours to run model.
+n_ts = cfg['optim']['n_ts']
+
+# Mapping interval in minutes.
+map_interval = cfg['optim']['map_interval']
 
 # Parameter names that will be optimized. Must match the names in the model.
 param_names_2d = cfg['param_2d']['param_names_2d']
@@ -143,7 +143,7 @@ for i, name in enumerate(range_param_names):
 # param_bounds_2d = [range_param_1]
 
 # Loss function. ['MSE', 'RMSE', 'NNSE']
-loss_func = cfg['optim']['loss_func']
+loss_func = cfg['model_2d']['loss_func']
 
 # Sensor locations.
 # locs = [(4952299.22, 655041.01), (4950859.92, 655273.81), (4952264.88, 655921.65), (4951767.55, 655117.21)]
@@ -250,7 +250,7 @@ optim = optimize1D2D.RASOpt(gt_ras_path_2d, sim_ras_path_2d, res_output_dir_2d, 
 x_best, experiment = optim.optimize_parameters()
 print('BEST X', x_best)
 
-# # Output the results.
-# output = optimize1D2D.Output(gt_ras_path_2d, sim_ras_path_2d, res_output_dir_2d, x_best)
-# output.save_botorch_experiment(experiment, '_'.join(param_names_2d + param_names_1d))
+# Output the results.
+output = optimize1D2D.Output(gt_ras_path_2d, sim_ras_path_2d, res_output_dir_2d, x_best)
+output.save_botorch_experiment(experiment, '_'.join(param_names_2d + param_names_1d))
 

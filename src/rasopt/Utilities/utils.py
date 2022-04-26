@@ -384,7 +384,7 @@ def raster_value_at_location(locations, raster_path):
 
 def satellite_groundtruth_rasters(comparison_timesteps, gt_plan_hdf_fp, cell_fp_idx_path, facepoint_coord_path,
                                   depth_path, cell_coord_path, cell_width_X, cell_width_Y, nodata, n_seeds, radius,
-                                  uncertainty_type='Depth', depth_error=0.1, max_probability=1):
+                                  geo_dir, uncertainty_type='Depth', depth_error=0.1, max_probability=1):
 
     uncertain_filepaths = {}
     for timestep in comparison_timesteps:
@@ -393,7 +393,7 @@ def satellite_groundtruth_rasters(comparison_timesteps, gt_plan_hdf_fp, cell_fp_
                                  timestep)
 
         # Rasterize the depth geojson.
-        raster_array, raster_fp = rasterize_depth_geojson(depth_gj, cell_width_X, cell_width_Y, nodata)
+        raster_array, raster_fp = rasterize_depth_geojson(depth_gj, cell_width_X, cell_width_Y, timestep, geo_dir, nodata)
 
         # Create uncertainty rasters.
         if uncertainty_type == 'Depth':
@@ -899,7 +899,7 @@ def depth_geojson(pXX_hdf_fp, cell_fp_idx_path, facepoint_coord_path, depth_path
     return feature_collection
 
 
-def rasterize_depth_geojson(depth_geojson, cell_width_X, cell_width_Y, timestep, nodata=-999.0):
+def rasterize_depth_geojson(depth_geojson, cell_width_X, cell_width_Y, timestep, geo_dir, nodata=-999.0):
     """
     Rasterize the depth geojson into a numpy array.
     :param depth_geojson: Geojson FeatureCollection of flood cell polygons where each polygon has a property "Depth".
@@ -907,18 +907,17 @@ def rasterize_depth_geojson(depth_geojson, cell_width_X, cell_width_Y, timestep,
     :param y_cell_width: Width of raster cell in coordinate units (Y-direction).
     :param timestep: The model time step the depth geojson corresponds to. This function saves the raster with the
         timestep in the file name "mesh_raster_<timestep>.tif".
+    :param geo_dir: Directory where geo files are stored.
     :return: Rasterized geojson as an array. Saves the rasterized array in the current directory.
     """
-    # Get current directory.
-    cur_dir = os.path.dirname(os.path.realpath(__file__))
 
     # Save the geojson feature collection temporarily.
-    gjson_fp = os.path.join(cur_dir, 'Geo_Files', 'mesh_gjson.geojson')
+    gjson_fp = os.path.join(geo_dir, 'Geo_Files', 'mesh_gjson.geojson')
     with open(gjson_fp, 'w') as gf:
         geojson.dump(depth_geojson, gf)
 
     # Raster path.
-    raster_fp = os.path.join(cur_dir, 'Geo_Files', f'mesh_raster_{timestep}.tif')
+    raster_fp = os.path.join(geo_dir, 'Geo_Files', f'mesh_raster_{timestep}.tif')
 
     # Rasterize the geojson feature collection.
     layer_name = 'mesh_gjson'

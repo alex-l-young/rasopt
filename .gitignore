@@ -7,9 +7,10 @@ RAS_507_linux/Secchia/Original_Inputs
 *.png
 .idea/
 Bayesian_Optimization/Output_Files
-.ipynb_checkpoints/*
+*examples/.ipynb_checkpoints/*
 *.pyc
 *Geo_Files/
 *.asv
 Data/*
-*.egg-info
+*src/rasopt.egg-info/*
+*src/rasopt_alex_l_young.egg-info/*

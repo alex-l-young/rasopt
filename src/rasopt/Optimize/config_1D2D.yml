@@ -7,14 +7,17 @@ optim:
 
   # Number of evaluations.
   nevals: 20
-  
-  # Loss function.
-  loss_func: RMSE
+
+  # Number of hours to run model.
+  n_ts: 20
+
+  # Mapping interval in minutes.
+  map_interval: 10
 
 # 2D Model configurations.
 dir_2d:
   # Ground truth directory.
-  gt_ras_path_2d: C:\Users\ay434\Documents\10_min_Runs\Secchia_flood_2014_10min_Orig_GT
+  gt_ras_path_2d: C:\Users\ay434\Documents\10_min_Runs\Secchia_flood_2014_10min_Orig_GT_LC
 
   # Simulation directory.
   sim_ras_path_2d: C:\Users\ay434\Documents\10_min_Runs\Secchia_flood_2014_10min_Sim
@@ -69,6 +72,9 @@ model_2d:
   # File path containing sensor locations.
   sensor_locations: sensor_locations.csv
 
+  # Loss function.
+  loss_func: RMSE
+
   # BINARY CALIBRATION
 
   # Time steps at which to do binary comparison.
@@ -99,12 +105,6 @@ model_2d:
 
   # Maximum error probability for flipping cells to a spurious value.
   max_probability: 1
-
-  # Number of hours to run model.
-  n_ts: 10
-
-  # Mapping interval in minutes.
-  map_interval: 10
   
 param_2d:
   # Parameter names that will be optimized. Must match the names in the model.
