@@ -247,10 +247,9 @@ optim = optimize1D2D.RASOpt(gt_ras_path_2d, sim_ras_path_2d, res_output_dir_2d, 
                  prj_fname_1d, bdy_fname_1d, flow_fname_1d, plan_fname_1d, geom_fname_1d, hydrograph_path,
                  param_names_1d, param_bounds_1d, breach_start, comparison_type=comparison_type, depth_cut=depth_cutoff,
                  binary_timesteps=binary_timesteps, run_1D=run_1D, gt_sat_rasters=gt_sat_rasters)
-x_best, experiment = optim.optimize_parameters()
-print('BEST X', x_best)
+experiment = optim.optimize_parameters()
 
 # Output the results.
-output = optimize1D2D.Output(gt_ras_path_2d, sim_ras_path_2d, res_output_dir_2d, x_best)
+output = optimize1D2D.Output(gt_ras_path_2d, sim_ras_path_2d, res_output_dir_2d)
 output.save_botorch_experiment(experiment, '_'.join(param_names_2d + param_names_1d))
 
