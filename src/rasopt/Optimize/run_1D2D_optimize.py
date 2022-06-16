@@ -150,8 +150,12 @@ loss_func = cfg['model_2d']['loss_func']
         # (4953264.49, 657720.27)]
 
 sensor_loc_fname = cfg['model_2d']['sensor_locations']
-loc_df = pd.read_csv(sensor_loc_fname, names=['Latitude', 'Longitude'])
-locs = list(zip(loc_df.Latitude, loc_df.Longitude))
+if comparison_type == 'Sensor':
+    loc_df = pd.read_csv(sensor_loc_fname, names=['Latitude', 'Longitude'])
+    locs = list(zip(loc_df.Latitude, loc_df.Longitude))
+elif comparison_type == 'Sensor_Max':
+    loc_df = pd.read_csv(sensor_loc_fname, names=['cell_index'])
+    locs = list(loc_df.cell_index)
 
 
 ### ===============================

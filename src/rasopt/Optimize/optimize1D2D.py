@@ -308,13 +308,13 @@ class RASOpt():
             print('ARGMAX X', argmax_x)
             print('RUN', i)
 
-        # Predict on fine grid and choose the maximum point.
-        fg, cov, X = self._predict_on_grid(model_bridge_with_GPEI, '_run_with_loss')
-        max_x_idx = np.argmax(fg)
-        x0 = np.array([X[max_x_idx,:]]) # TODO: This may not behave the same for 1-D vs multi-D
-        x_best = self._maximize_gp(x0, model_bridge_with_GPEI, '_run_with_loss')
+        # # Predict on fine grid and choose the maximum point.
+        # fg, cov, X = self._predict_on_grid(model_bridge_with_GPEI, '_run_with_loss')
+        # max_x_idx = np.argmax(fg)
+        # x0 = np.array([X[max_x_idx,:]]) # TODO: This may not behave the same for 1-D vs multi-D
+        # x_best = self._maximize_gp(x0, model_bridge_with_GPEI, '_run_with_loss')
 
-        return x_best, experiment_hec
+        return experiment_hec
 
 
     def _predict_on_grid(self, model, model_name):
@@ -407,7 +407,6 @@ class RASOpt():
         Routing method for handling all processing that needs to be done dynamically during optimzation.
         :return:
         """
-        print('PARAMS', params)
 
         ax_param_names = [p.name for p in self.param_bounds]
         params = [params[ax_param_names[i]] for i in range(len(params))]
@@ -440,6 +439,7 @@ class RASOpt():
         :param params: Geometry and breach parameters.
         :return: None
         """
+
         breach_params = {}
         geom_params = []
         for i in range(len(params)):
@@ -534,7 +534,11 @@ class RASOpt():
             loss_vals = []
             total_sim = []
             total_meas = []
+            count = 1
+            fig, ax = plt.subplots()
             for loc in self.locs:
+                print(count)
+                count += 1
                 # Select closest row from simulated data set.
                 sim_row = utils.closest_row(sim_dep_df, loc)
                 total_sim.extend(sim_row)
@@ -549,6 +553,11 @@ class RASOpt():
                 start_clip_idx = int(self.start_ts * 60 / self.map_interval - 1)
                 sim_row = sim_row[start_clip_idx:]
                 meas_row = meas_row[start_clip_idx:]
+
+                if count == 2:
+                    ax.plot(meas_row)
+                ax.plot(sim_row)
+                plt.show()
 
                 # Check if at least one array is all zero.
                 if not np.any(sim_row) or not np.any(meas_row):
@@ -576,8 +585,8 @@ class RASOpt():
 
                 elif self.loss_func == 'RMSE':
                     # Add some noise to the measured data.
-                    rng = np.random.default_rng(2022)
-                    meas_row = meas_row + rng.normal(0, 0.02, size=meas_row.shape)
+                    # rng = np.random.default_rng(2022)
+                    # meas_row = meas_row + rng.normal(0, 0.02, size=meas_row.shape)
 
                     loss_vals.append(utils.RMSE(sim_row, meas_row))
 
@@ -587,17 +596,33 @@ class RASOpt():
             else:
                 loss = None
 
-            # Compute the loss on all non-zero sensor points.
-            c = np.zeros((len(total_meas), 2))
-            c[:, 0] = total_meas
-            c[:, 1] = total_sim
-            c = c[np.all(c != 0, axis=1)]
-            loss = utils.MSE(c[:,1], c[:,0])
+            # # Compute the loss on all non-zero sensor points.
+            # c = np.zeros((len(total_meas), 2))
+            # c[:, 0] = total_meas
+            # c[:, 1] = total_sim
+            # c = c[np.all(c != 0, axis=1)]
+            # loss = utils.MSE(c[:,1], c[:,0])
             loss = -loss # Since we're maximizing.
 
             # # Compute log(2) of the values.
             # SMALL = 0.0001 # Add small value so there is no log(0).
             # loss = np.log(loss+SMALL) / np.log(1.1)
+
+        elif self.comparison_type == 'Sensor_Max':
+            # Simulated values.
+            sim_depths = sim_dep_df.iloc[self.locs, 2:].to_numpy()
+
+            # Measured values.
+            gt_depths = meas_dep_df.iloc[self.locs, 2:].to_numpy()
+            gt_depths = gt_depths[:, :sim_depths.shape[1]]
+
+            # Compute loss function.
+            if self.loss_func == 'RMSE':
+                loss = np.mean(np.sqrt(np.sum(np.square(gt_depths - sim_depths), axis=1) / sim_depths.shape[1]))
+                loss = -loss
+            fig, ax = plt.subplots()
+            ax.scatter(gt_depths[:, :], sim_depths[:, :])
+            plt.show()
 
         elif self.comparison_type == 'Binary':
             # loss = utils.satellite_success_metric(self.gt_sat_rasters, self.binary_timesteps, self.plan_fp_2d,
@@ -651,7 +676,7 @@ class RASOpt():
 # Output class.
 class Output():
 
-    def __init__(self, gt_ras_path_2d, sim_ras_path_2d, res_output_dir_2d, result):
+    def __init__(self, gt_ras_path_2d, sim_ras_path_2d, res_output_dir_2d, result=None):
 
         self.gt_ras_path_2d = gt_ras_path_2d
         self.sim_ras_path_2d = sim_ras_path_2d
