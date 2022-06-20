@@ -31,6 +31,7 @@ from ax import RangeParameter, ParameterType
 from ax.core.observation import ObservationFeatures
 from botorch.models.gp_regression import SingleTaskGP
 from botorch.acquisition.monte_carlo import qNoisyExpectedImprovement
+from botorch.acquisition import qKnowledgeGradient
 
 # Append Flood_Sim directory to the current path.
 flood_sim_path = os.path.dirname(os.path.abspath(__file__))
@@ -283,7 +284,8 @@ class RASOpt():
                 experiment=experiment_hec,
                 surrogate=Surrogate(SingleTaskGP),
                 data=experiment_hec.eval(),
-                botorch_acqf_class=qNoisyExpectedImprovement
+                botorch_acqf_class=qNoisyExpectedImprovement,
+                # botorch_acqf_class=qKnowledgeGradient,
             )
 
             # Suggest next point.
@@ -554,10 +556,8 @@ class RASOpt():
                 sim_row = sim_row[start_clip_idx:]
                 meas_row = meas_row[start_clip_idx:]
 
-                if count == 2:
-                    ax.plot(meas_row)
-                ax.plot(sim_row)
-                plt.show()
+                ax.scatter(meas_row, sim_row)
+
 
                 # Check if at least one array is all zero.
                 if not np.any(sim_row) or not np.any(meas_row):
@@ -590,6 +590,7 @@ class RASOpt():
 
                     loss_vals.append(utils.RMSE(sim_row, meas_row))
 
+            plt.show()
             # Compute mean of loss function values.
             if loss_vals != []:
                 loss = np.mean(np.array(loss_vals))
