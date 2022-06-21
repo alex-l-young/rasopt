@@ -3,6 +3,7 @@
 # Library imports.
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 # rasopt imports.
 from rasopt.Utilities.utils import inun_fit, extract_depths, inun_error, inun_sensitivity
@@ -12,17 +13,28 @@ from rasopt.Utilities.utils import inun_fit, extract_depths, inun_error, inun_se
 # cal_plan_fp = r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Mannings_Sensitivity\Secchia_Panaro.p23_camp0.0575.hdf"
 # guess_plan_fp = r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Clustered_GT\Secchia_Panaro.p23_camp0.07.hdf"
 
-gt_plan_fp =r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\CDF_Single_Veg\Secchia_Panaro.p23_Orig_GT.hdf"
-cal_plan_fp = r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\CDF_Single_Veg\Secchia_Panaro.p23_camp0.0588.hdf"
-guess_plan_fp = r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Clustered_GT\Secchia_Panaro.p23_camp0.07.hdf"
+file_dir = r"C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output"
+gt_fname ="Secchia_Panaro.p23_GT.hdf"
+sim_fnames = [
+    "Secchia_Panaro.p23_c1smax.hdf",
+    "Secchia_Panaro.p23_c2smax.hdf",
+    "Secchia_Panaro.p23_c3smax.hdf",
+    "Secchia_Panaro.p23_c4smax.hdf",
+    "Secchia_Panaro.p23_c5smax.hdf",
+]
+labels = [
+    "$N_{class}=1, N_{sensor}=Max$",
+    "$N_{class}=2, N_{sensor}=Max$",
+    "$N_{class}=3, N_{sensor}=Max$",
+"$N_{class}=4, N_{sensor}=Max$",
+"$N_{class}=5, N_{sensor}=Max$",
+]
 
+gt_fp = os.path.join(file_dir, gt_fname)
+sim_fps = [os.path.join(file_dir, fname) for fname in sim_fnames]
 
 # Time step duration (hrs).
 dt = 1/6
-
-# Labels.
-n_cal = 0.0588
-n_guess = 0.07
 
 # HDF Paths.
 # Path to cell coordinates.
@@ -32,77 +44,70 @@ cell_coord_path = '/Geometry/2D Flow Areas/Secchia_Panaro/Cells Center Coordinat
 depth_path = '/Results/Unsteady/Output/Output Blocks/Base Output/Unsteady Time Series/2D Flow Areas/Secchia_Panaro/Depth'
 
 # Depths from all models.
-gt_depths = extract_depths(gt_plan_fp, depth_path, cell_coord_path)
-cal_depths = extract_depths(cal_plan_fp, depth_path, cell_coord_path)
-guess_depths = extract_depths(guess_plan_fp, depth_path, cell_coord_path)
+gt_depths = extract_depths(gt_fp, depth_path, cell_coord_path)
 
 # Number of time steps.
 Nt = gt_depths.shape[1] - 2
 
-# Fit metrics.
-cal_fit = []
-guess_fit = []
-cal_error1 = []
-guess_error1 = []
-cal_error2 = []
-guess_error2 = []
-cal_sens = []
-guess_sens = []
-for t in range(Nt):
-    ts_name = f'Time_{t}'
+# Statistics.
+sens = np.zeros((Nt, len(sim_fps)))
+t1 = np.zeros((Nt, len(sim_fps)))
+t2 = np.zeros((Nt, len(sim_fps)))
+fit = np.zeros((Nt, len(sim_fps)))
 
-    # Depths for a particular time step.
-    gt_ts = gt_depths.loc[:, ts_name]
-    cal_ts = cal_depths.loc[:, ts_name]
-    guess_ts = guess_depths.loc[:, ts_name]
+for i, sim_fp in enumerate(sim_fps):
+    print('Processing', labels[i])
+    # Simulation depths.
+    sim_depths = extract_depths(sim_fp, depth_path, cell_coord_path)
+    for t in range(Nt):
+        ts_name = f'Time_{t}'
 
-    # Fit metric.
-    cal_fit.append(inun_fit(gt_ts, cal_ts, depth_cut=0.01))
-    guess_fit.append(inun_fit(gt_ts, guess_ts, depth_cut=0.01))
-    cal_error1.append(inun_error(gt_ts, cal_ts, 1, depth_cut=0.01))
-    guess_error1.append(inun_error(gt_ts, guess_ts, 1, depth_cut=0.01))
-    cal_error2.append(inun_error(gt_ts, cal_ts, 2, depth_cut=0.01))
-    guess_error2.append(inun_error(gt_ts, guess_ts, 2, depth_cut=0.01))
-    cal_sens.append(inun_sensitivity(gt_ts, cal_ts, depth_cut=0.01))
-    guess_sens.append(inun_sensitivity(gt_ts, guess_ts, depth_cut=0.01))
+        # Depths for a particular time step.
+        gt_ts = gt_depths.loc[:, ts_name]
+        sim_ts = sim_depths.loc[:, ts_name]
+
+        # Fit metric.
+        sens[t, i] = inun_fit(gt_ts, sim_ts, depth_cut=0.01)
+        t1[t, i] = inun_error(gt_ts, sim_ts, 1, depth_cut=0.01)
+        t2[t, i] = inun_error(gt_ts, sim_ts, 2, depth_cut=0.01)
+        fit[t, i] = inun_fit(gt_ts, sim_ts, depth_cut=0.01)
 
 # Plot the fit metrics over the duration of the flood.
 time_ax = np.arange(Nt) * dt
 
 fig, ax = plt.subplots(2,2,figsize=(10,8), sharex='col')
-ax[0,0].plot(time_ax, cal_sens, label='$n^*=0.0588$')
-ax[0,0].plot(time_ax, guess_sens, label='$n_p=0.07$')
-# ax[0,0].set_xlabel('Time After Beach (hr)', fontsize=16)
+for i, sim_fp in enumerate(sim_fps):
+    ax[0,0].plot(time_ax, sens[:, i], label=labels[i])
+
+    ax[1,0].plot(time_ax, t1[:, i], label=labels[i])
+
+    ax[0,1].plot(time_ax, fit[:, i], label=labels[i])
+
+    ax[1,1].plot(time_ax, t2[:, i], label=labels[i])
+
+
+# Format the axes.
 ax[0,0].set_ylabel('Sensitivity', fontsize=16)
 ax[0,0].tick_params(axis='x', labelsize=14)
 ax[0,0].tick_params(axis='y', labelsize=14)
 ax[0,0].legend(fontsize=14)
 
-ax[1,0].plot(time_ax, cal_error1, label='$\hat{n}=0.0588$')
-ax[1,0].plot(time_ax, guess_error1, label='$n=0.07$')
-ax[1,0].set_xlabel('Time After Beach (hr)', fontsize=16)
-ax[1,0].set_ylabel('Type I Error', fontsize=16)
-ax[1,0].tick_params(axis='x', labelsize=14)
-ax[1,0].tick_params(axis='y', labelsize=14)
-# ax[1,0].legend(fontsize=14)
+ax[1, 0].set_xlabel('Time After Beach (hr)', fontsize=16)
+ax[1, 0].set_ylabel('Type I Error', fontsize=16)
+ax[1, 0].tick_params(axis='x', labelsize=14)
+ax[1, 0].tick_params(axis='y', labelsize=14)
 
-ax[0,1].plot(time_ax, cal_fit, label='$\hat{n}=0.0588$')
-ax[0,1].plot(time_ax, guess_fit, label='$n=0.07$')
-# ax[0,1].set_xlabel('Time After Beach (hr)', fontsize=16)
-ax[0,1].set_ylabel('Fit', fontsize=16)
-ax[0,1].tick_params(axis='x', labelsize=14)
-ax[0,1].tick_params(axis='y', labelsize=14)
-# ax[0,1].legend(fontsize=14)
+ax[0, 1].set_ylabel('Fit', fontsize=16)
+ax[0, 1].tick_params(axis='x', labelsize=14)
+ax[0, 1].tick_params(axis='y', labelsize=14)
 
-ax[1,1].plot(time_ax, cal_error2, label='$\hat{n}=0.0588$')
-ax[1,1].plot(time_ax, guess_error2, label='$n=0.07$')
-ax[1,1].set_xlabel('Time After Beach (hr)', fontsize=16)
-ax[1,1].set_ylabel('Type II Error', fontsize=16)
-ax[1,1].tick_params(axis='x', labelsize=14)
-ax[1,1].tick_params(axis='y', labelsize=14)
-# ax[1,1].legend(fontsize=14)
+ax[1, 1].set_xlabel('Time After Beach (hr)', fontsize=16)
+ax[1, 1].set_ylabel('Type II Error', fontsize=16)
+ax[1, 1].tick_params(axis='x', labelsize=14)
+ax[1, 1].tick_params(axis='y', labelsize=14)
+
 fig.tight_layout()
-fig.savefig(r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Figures\Case_Study_1\inun_metrics.png")
+fig.savefig(r"C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Figures\Roughness_Case_Study\stats_smax.png")
 
 plt.show()
 

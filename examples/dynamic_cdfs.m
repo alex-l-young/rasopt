@@ -7,13 +7,13 @@ clear
 gt_plan_fp = "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_GT.hdf";
 sim_plan_fps = [
     "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c1smax.hdf",
-    "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c2smax.hdf",
+    "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c3s6.hdf",
     "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c3smax.hdf",
     "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c4smax.hdf",
     "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c5smax.hdf",
     ];
 sim_ids = ["$C=1,S=Max$", 
-    "$C=2,S=Max$",
+    "$C=3,S=6$",
     "$C=3,S=Max$",
     "$C=4,S=Max$",
     "$C=5,S=Max$",];
@@ -112,7 +112,8 @@ for i = 1:length(sim_plan_fps)
 end
 xline(0, 'r--', 'HandleVisibility', 'off')
 hold off
-legend()
+leg = legend();
+set(leg, 'interpreter', 'latex')
 set(gca, 'FontSize', 15)
 xlab = xlabel('$$t \ (hr)$$');
 set(xlab, 'interpreter', 'latex')
