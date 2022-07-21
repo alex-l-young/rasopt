@@ -4,19 +4,35 @@ close all
 clear
 
 % Specify the file names.
-gt_plan_fp = "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_GT.hdf";
-sim_plan_fps = [
-    "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c1smax.hdf",
-    "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c3s6.hdf",
-    "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c3smax.hdf",
-    "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c4smax.hdf",
-    "C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output\Secchia_Panaro.p23_c5smax.hdf",
+data_dir = '/Users/alexyoung/Library/CloudStorage/Box-Box/Research/Flood_Sim_Materials/BayesOpt_Paper/Data/Mannings_Sensitivity/';
+gt_data_dir = '/Users/alexyoung/Library/CloudStorage/Box-Box/Research/Flood_Sim_Materials/BayesOpt_Paper/Data/Roughness_Output/';
+gt_plan_name = "Secchia_Panaro.p23_GT.hdf";
+sim_plan_names = [
+    "Secchia_Panaro.p23_veg1_0.03.hdf",
+    "Secchia_Panaro.p23_veg1_0.05.hdf",
+    "Secchia_Panaro.p23_veg1_0.07.hdf",
+    "Secchia_Panaro.p23_veg1_0.09.hdf",
+    "Secchia_Panaro.p23_veg1_0.11.hdf",
+%     "Secchia_Panaro.p23_c1s5.hdf",
+%     "Secchia_Panaro.p23_c4s2.hdf",
+%     "Secchia_Panaro.p23_c4s1.hdf",
     ];
-sim_ids = ["$C=1,S=Max$", 
-    "$C=3,S=6$",
-    "$C=3,S=Max$",
-    "$C=4,S=Max$",
-    "$C=5,S=Max$",];
+sim_ids = ["$n=0.03$", 
+    "$n=0.05$",
+    "$n=0.07$",
+    "$n=0.09$",
+    "$n=0.11$",
+%     "$N_{class}=1,N_{sensor}=5$",
+%     "$N_{class}=4,N_{sensor}=2$",
+%     "$N_{class}=4,N_{sensor}=1$",
+    ];
+
+% Create file paths.
+gt_plan_fp = gt_data_dir + gt_plan_name;
+sim_plan_fps = string();
+for i = 1:length(sim_plan_names)
+    sim_plan_fps(i) = data_dir + sim_plan_names(i);
+end
 
 % HDF Paths.
 % Path to cell coordinates.
@@ -138,14 +154,14 @@ for i = 1:length(sim_plan_fps)
 
     plot(time, delta_cdf, 'LineWidth', 2, 'DisplayName', sim_ids(i));
 end
-xline(0, 'r--', 'HandleVisibility', 'off')
+% xline(0, 'r--', 'HandleVisibility', 'off')
 hold off
 leg = legend();
 set(leg, 'interpreter', 'latex')
-set(gca, 'FontSize', 15)
+set(gca, 'FontSize', 18)
 xlab = xlabel('$$t \ (hr)$$');
 set(xlab, 'interpreter', 'latex')
-ylab = ylabel('$$Pr(\delta_{tc} < t)$$');
+ylab = ylabel('$$Fraction(|\delta_{tc}| < t)$$');
 set(ylab, 'interpreter', 'latex')
 xlim([0 5])
 
