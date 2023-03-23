@@ -7,7 +7,7 @@ RAS_507_linux/Secchia/Original_Inputs
 *.png
 .idea/
 Bayesian_Optimization/Output_Files
-*examples/.ipynb_checkpoints/*
+analysis/.ipynb_checkpoints/*
 *.pyc
 *Geo_Files/
 *.asv

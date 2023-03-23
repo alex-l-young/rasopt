@@ -848,8 +848,8 @@ def extract_hec_breach_hydrograph(proj_path):
     return breach_flow, times
 
 
-def depth_geojson(pXX_hdf_fp, cell_fp_idx_path, facepoint_coord_path, depth_path, cell_coord_path, timestep,
-                  elevation=False):
+def depth_geojson(pXX_hdf_fp, cell_fp_idx_path, facepoint_coord_path, depth_path, cell_coord_path, timestep=0,
+                  elevation=False, depths=None):
     """
     Makes a geojson of the flood domain with water depth value in each polygon.
     :param pXX_hdf_fp: Path to pXX.hdf file that contains geometry and depth information.
@@ -872,9 +872,10 @@ def depth_geojson(pXX_hdf_fp, cell_fp_idx_path, facepoint_coord_path, depth_path
     cell_min_elev = f['Geometry/2D Flow Areas/Secchia_Panaro/Cells Minimum Elevation'][:]
     cell_min_elev = np.nan_to_num(cell_min_elev, nan=-999)
 
-    # Extract ground truth depths.
-    gt_dep_df = extract_depths(pXX_hdf_fp, depth_path, cell_coord_path)
-    depths = gt_dep_df.iloc[:, timestep + 2].to_numpy()
+    # Extract ground truth depths if not supplied in function call.
+    if depths is None:
+        gt_dep_df = extract_depths(pXX_hdf_fp, depth_path, cell_coord_path)
+        depths = gt_dep_df.iloc[:, timestep + 2].to_numpy()
 
     # Add on cell elevation.
     if elevation is True:
@@ -908,7 +909,7 @@ def rasterize_depth_geojson(depth_geojson, cell_width_X, cell_width_Y, timestep,
     :param timestep: The model time step the depth geojson corresponds to. This function saves the raster with the
         timestep in the file name "mesh_raster_<timestep>.tif".
     :param geo_dir: Directory where geo files are stored.
-    :return: Rasterized geojson as an array. Saves the rasterized array in the current directory.
+    :return: Rasterized geojson as an array. Saves the rasterized array in the geo_dir directory specified.
     """
 
     # Save the geojson feature collection temporarily.
@@ -936,6 +937,50 @@ def rasterize_depth_geojson(depth_geojson, cell_width_X, cell_width_Y, timestep,
     # Open back up the raster and read out the array.
     with rasterio.open(raster_fp) as dataset:
         raster_array = dataset.read(1)
+
+    return raster_array, raster_fp
+
+
+def rasterize_geojson(feature_collection, property_name, save_dir, raster_fname, cell_width_X, cell_width_Y,
+                      nodata=-999.0):
+    """
+    Rasterizes a geojson feature collection.
+    :param feature_collection: Feature collection [geojson object]
+    :param property_name: Name of property to rasterize. [string]
+    :param save_dir: Directory in which to save the raster. [string]
+    :param raster_fname: Raster file name with ".tif" [string]
+    :param cell_width_X: Longitudinal width of cell in units of the geojson. [float]
+    :param cell_width_Y: Latitudinal width of cell in units of the geojson. [float]
+    :param nodata: No-data value for the raster. [float]
+    :return: Raster array [numpy array], raster file path [string]
+    """
+    # Save the geojson feature collection temporarily.
+    gjson_fp = os.path.join(save_dir, 'tmp_gjson.geojson')
+    with open(gjson_fp, 'w') as gf:
+        geojson.dump(feature_collection, gf)
+
+    # Raster path.
+    raster_fp = os.path.join(save_dir, raster_fname)
+
+    # Rasterize the geojson feature collection.
+    layer_name = 'tmp_gjson'
+    source_ds = ogr.Open(gjson_fp)
+    source_layer = source_ds.GetLayer()
+    x_min, x_max, y_min, y_max = source_layer.GetExtent()
+
+    gdal_command = ("gdal_rasterize -at -l {} -a {} -tr {} {} -a_nodata {} -te {} {} {} {} -ot Float32 "
+                    "-of GTiff {} {}".format(layer_name, property_name, cell_width_X,
+                                             cell_width_Y, nodata, x_min, y_min, x_max,
+                                             y_max, gjson_fp, raster_fp))
+    print(gdal_command)
+    subprocess.call(gdal_command, shell=True)
+
+    # Open back up the raster and read out the array.
+    with rasterio.open(raster_fp) as dataset:
+        raster_array = dataset.read(1)
+
+    # # Delete the temporary geojson.
+    # os.remove(gjson_fp)
 
     return raster_array, raster_fp
 

@@ -54,7 +54,7 @@ def terrain_water_depth(dem_fp, plan_hdf_fp, cell_fp_idx_path, facepoint_coord_p
                                       timestep, elevation=True)
 
     # Save depth geojson.
-    gjson_fp = os.path.join(geo_dir, 'Geo_Files', 'mesh_gjson.geojson')
+    gjson_fp = os.path.join(geo_dir, 'mesh_gjson.geojson')
     with open(gjson_fp, 'w') as gf:
         geojson.dump(depth_geojson, gf)
 
@@ -97,7 +97,7 @@ def terrain_water_depth(dem_fp, plan_hdf_fp, cell_fp_idx_path, facepoint_coord_p
 
     # Raster path.
     print('DEM SHAPE', dem_array.shape)
-    raster_fp = os.path.join(geo_dir, 'Geo_Files', f'mesh_raster_{timestep}.tif')
+    raster_fp = os.path.join(geo_dir, f'mesh_raster_{timestep}.tif')
 
     # Rasterize the geojson feature collection.
     layer_name = 'mesh_gjson'
@@ -120,7 +120,7 @@ def terrain_water_depth(dem_fp, plan_hdf_fp, cell_fp_idx_path, facepoint_coord_p
     depth_array[depth_array > 100] = 0 # Handle no data value from dem_array causing extremely large values.
 
     # Raster path.
-    depth_raster_fp = os.path.join(geo_dir, 'Geo_Files', out_fname_prefix + f'depth_raster_{timestep}.tif')
+    depth_raster_fp = os.path.join(geo_dir, out_fname_prefix + f'depth_raster_{timestep}.tif')
 
     with rasterio.open(
         depth_raster_fp,
@@ -143,6 +143,7 @@ def terrain_water_depth(dem_fp, plan_hdf_fp, cell_fp_idx_path, facepoint_coord_p
         os.remove(raster_fp)
 
     return depth_array, depth_raster_fp
+
 
 
 if __name__ == '__main__':

@@ -3,13 +3,13 @@
 # Optimization.
 optim:
   # Number of initializations.
-  nstarts: 5
+  nstarts: 2
 
   # Number of evaluations.
-  nevals: 95
+  nevals: 2
 
   # Number of hours to run model.
-  n_ts: 10
+  n_ts: 5
 
   # Mapping interval in minutes.
   map_interval: 10
@@ -62,7 +62,7 @@ dir_2d:
   facepoint_coord_path: Geometry/2D Flow Areas/Secchia_Panaro/FacePoints Coordinate
 
 model_2d:
-  # Comparison Type "Binary" or "Sensor".
+  # Comparison Type "Binary" or "Sensor". Binary is currently unsupported.
   comparison_type: Sensor
 
   # SENSOR CALIBRATION
@@ -70,7 +70,7 @@ model_2d:
   start_ts: 1
   
   # File path containing sensor locations.
-  sensor_locations: sensor_locations.csv
+  sensor_locations: C:\Users\ay434\Documents\rasopt\examples\sensor_locations.csv
 
   # Loss function.
   loss_func: RMSE
@@ -88,23 +88,8 @@ model_2d:
   cell_width_X: 100
   cell_width_Y: 100
 
-  # Uncertainty spatial correlation radius.
-  radius: 10
-
-  # Depth error. The range of possible depth errors for a spurious cell in the uncertainty raster.
-  depth_error: 0.1
-
   # No data value.
   nodata: -999.0
-
-  # Number of uncertainty seeds.
-  n_seeds: 5
-
-  # Uncertainty type. "Binary" or "Depth".
-  uncertainty_type: Binary
-
-  # Maximum error probability for flipping cells to a spurious value.
-  max_probability: 1
   
 param_2d:
   # Parameter names that will be optimized. Must match the names in the model.
@@ -178,6 +163,6 @@ model_1d:
   # Output interval for breach hydrograph in minutes.
   output_interval: 10
 
-  # Breach start.
+  # Breach start Formatted as "19JAN2014 0240"
   breach_start: 19JAN2014 0240
 

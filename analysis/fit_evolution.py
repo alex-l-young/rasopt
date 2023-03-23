@@ -4,6 +4,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import re
 
 # rasopt imports.
 from rasopt.Utilities.utils import inun_fit, extract_depths, inun_error, inun_sensitivity
@@ -13,22 +14,30 @@ from rasopt.Utilities.utils import inun_fit, extract_depths, inun_error, inun_se
 # cal_plan_fp = r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Mannings_Sensitivity\Secchia_Panaro.p23_camp0.0575.hdf"
 # guess_plan_fp = r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Clustered_GT\Secchia_Panaro.p23_camp0.07.hdf"
 
-file_dir = r"C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output"
+file_dir = r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Data\Roughness_Output"
 gt_fname ="Secchia_Panaro.p23_GT.hdf"
 sim_fnames = [
-    "Secchia_Panaro.p23_c1smax.hdf",
-    "Secchia_Panaro.p23_c2smax.hdf",
-    "Secchia_Panaro.p23_c3smax.hdf",
-    "Secchia_Panaro.p23_c4smax.hdf",
-    "Secchia_Panaro.p23_c5smax.hdf",
+    "Secchia_Panaro.p23_c1s5.hdf",
+    "Secchia_Panaro.p23_c2s5.hdf",
+    "Secchia_Panaro.p23_c3s5.hdf",
+    "Secchia_Panaro.p23_c4s5.hdf",
+    "Secchia_Panaro.p23_c5s5.hdf",
 ]
-labels = [
-    "$N_{class}=1, N_{sensor}=Max$",
-    "$N_{class}=2, N_{sensor}=Max$",
-    "$N_{class}=3, N_{sensor}=Max$",
-"$N_{class}=4, N_{sensor}=Max$",
-"$N_{class}=5, N_{sensor}=Max$",
-]
+
+save_label = 's5'
+# labels = [
+#     "$N_{class}=1, N_{sensor}=Max$",
+#     "$N_{class}=2, N_{sensor}=Max$",
+#     "$N_{class}=3, N_{sensor}=Max$",
+# "$N_{class}=4, N_{sensor}=Max$",
+# "$N_{class}=5, N_{sensor}=Max$",
+# ]
+
+labels = []
+for name in sim_fnames:
+    n_class = re.search(r'c(\d)', name).group(1)
+    n_sens = re.search(r's(.*)\.', name).group(1)
+    labels.append(f"$N_{{class}}={n_class}, N_{{sensor}}={n_sens}$")
 
 gt_fp = os.path.join(file_dir, gt_fname)
 sim_fps = [os.path.join(file_dir, fname) for fname in sim_fnames]
@@ -72,6 +81,13 @@ for i, sim_fp in enumerate(sim_fps):
         t2[t, i] = inun_error(gt_ts, sim_ts, 2, depth_cut=0.01)
         fit[t, i] = inun_fit(gt_ts, sim_ts, depth_cut=0.01)
 
+# Print the mean values over all time steps.
+for i, label in enumerate(labels):
+    print(f'{label} Sensitivity: {np.mean(sens[:,i])}')
+    print(f'{label} Fit: {np.mean(fit[:, i])}')
+    print(f'{label} Type I Error: {np.mean(t1[:, i])}')
+    print(f'{label} Type II Error: {np.mean(t2[:, i])}')
+
 # Plot the fit metrics over the duration of the flood.
 time_ax = np.arange(Nt) * dt
 
@@ -107,7 +123,7 @@ ax[1, 1].tick_params(axis='x', labelsize=14)
 ax[1, 1].tick_params(axis='y', labelsize=14)
 
 fig.tight_layout()
-fig.savefig(r"C:\Users\ayoun\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Figures\Roughness_Case_Study\stats_smax.png")
+fig.savefig(r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\BayesOpt_Paper\Figures\Roughness_Case_Study\inun_stats_{}.png".format(save_label))
 
 plt.show()
 
