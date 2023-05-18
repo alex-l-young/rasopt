@@ -3,7 +3,7 @@
 # Optimization.
 optim:
   # Number of initializations.
-  nstarts: 2
+  nstarts: 1
 
   # Number of evaluations.
   nevals: 2
@@ -96,25 +96,17 @@ param_2d:
   param_names_2d:
     - veg1
     - veg2
-    - veg3
-    - veg4
 
   # Parameter bounds. put "_g" after land roughness parameters.
   range_param_names_2d:
     - veg1_n_g
     - veg2_n_g
-    - veg3_n_g
-    - veg4_n_g
 
   param_lower_2d:
     - 0.01
     - 0.01
-    - 0.01
-    - 0.01
 
   param_upper_2d:
-    - 0.2
-    - 0.2
     - 0.2
     - 0.2
 

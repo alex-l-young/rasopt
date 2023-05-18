@@ -681,7 +681,7 @@ class Output():
 
         self.gt_ras_path_2d = gt_ras_path_2d
         self.sim_ras_path_2d = sim_ras_path_2d
-        self.res_output_path_2d = os.path.join(sim_ras_path_2d, res_output_dir_2d)
+        self.res_output_path_2d = res_output_dir_2d
         self.result = result
 
 
