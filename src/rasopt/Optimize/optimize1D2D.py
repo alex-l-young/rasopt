@@ -537,7 +537,7 @@ class RASOpt():
             total_sim = []
             total_meas = []
             count = 1
-            fig, ax = plt.subplots()
+            # fig, ax = plt.subplots()
             for loc in self.locs:
                 print(count)
                 count += 1
@@ -556,7 +556,7 @@ class RASOpt():
                 sim_row = sim_row[start_clip_idx:]
                 meas_row = meas_row[start_clip_idx:]
 
-                ax.scatter(meas_row, sim_row)
+                # ax.scatter(meas_row, sim_row)
 
 
                 # Check if at least one array is all zero.
@@ -621,9 +621,9 @@ class RASOpt():
             if self.loss_func == 'RMSE':
                 loss = np.mean(np.sqrt(np.sum(np.square(gt_depths - sim_depths), axis=1) / sim_depths.shape[1]))
                 loss = -loss
-            fig, ax = plt.subplots()
-            ax.scatter(gt_depths[:, :], sim_depths[:, :])
-            plt.show()
+            # fig, ax = plt.subplots()
+            # ax.scatter(gt_depths[:, :], sim_depths[:, :])
+            # plt.show()
 
         elif self.comparison_type == 'Binary':
             # loss = utils.satellite_success_metric(self.gt_sat_rasters, self.binary_timesteps, self.plan_fp_2d,
