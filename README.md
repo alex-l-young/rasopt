@@ -9,21 +9,42 @@ way, thus sidestepping the cumbersome GUI that is required to run HEC-RAS normal
 To install rasopt, run the following within a virtual environment of choice.
 
 ```
-c:\> git clone https://github.com/alex-l-young/rasopt
+C:\> git clone https://github.com/alex-l-young/rasopt
 
-c:\> cd rasopt
+C:\> cd rasopt
 
-c:\rasopt> pip install .
+C:\rasopt> pip install .
 ```
 
+### Python Version
+Rasopt has been tested with Python version 3.9. There may be some flexibility with versioning, however, the GDAL and
+Rasterio wheel files are for v3.9, so new wheel files will need to be downloaded for different Python versions.
+GDAL and Rasterio wheel files for different Python version can be found 
+[here](https://www.lfd.uci.edu/~gohlke/pythonlibs/).
 
 ### Required Libraries
-rascontrol - rascontrol is not on PyPI and so must be installed separately using the following commands.
+
+**rascontrol** - rascontrol is not on PyPI and so must be installed separately using the following commands.
 
 ```
-c:\> git clone https://github.com/mikebannis/rascontrol.git
+C:\> git clone https://github.com/mikebannis/rascontrol.git
 
-c:\> cd rascontrol
+C:\> cd rascontrol
 
-c:\rascontrol> pip install .
+C:\rascontrol> pip install .
 ```
+
+**GDAL** - GDAL must be installed from the wheel file included in the whls directory.
+
+In the virtual environment you plan to use for rasopt, perform the following:
+```
+(rasopt-venv) C:\rasopt> pip install whls/GDAL-3.4.2-cp39-cp39-win_amd64.whl
+```
+
+**Rasterio** - Rasterio must be installed from the wheel file included in the whls directory after installing GDAL.
+
+In the virtual environment you plan to use for rasopt, perform the following:
+```
+(rasopt-venv) C:\rasopt> pip install whls/rasterio-1.2.10-cp39-cp39-win_amd64.whl
+```
+
