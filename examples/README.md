@@ -31,3 +31,6 @@ state of the model setup and will not perform model configuration beyond paramet
 
 In general, the 1D model doesn't need to be run in most cases as long as the input hydrograph for the 2D model is already in place. The setting the 1D model run flag "flag_1d: run_1d" to True will run the 1D model and then insert the breach hydrograph into the 2D model. This procedure has only been tested for a single levee breach, so it may not work when multiple levee breaches are modeled.
 
+## Optimizing Parameters
+
+To run the HEC-RAS optimization procedure, use the jupyter notebook calibration_example.ipynb
