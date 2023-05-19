@@ -17,10 +17,10 @@ optim:
 # 2D Model configurations.
 dir_2d:
   # Ground truth directory.
-  gt_ras_path_2d: C:\Users\ay434\Documents\10_min_Runs\Secchia_flood_2014_10min_Orig_GT
+  gt_ras_path_2d: ~\Zenodo_Upload\Secchia_flood_2014_10min_Orig_GT
 
   # Simulation directory.
-  sim_ras_path_2d: C:\Users\ay434\Documents\10_min_Runs\Secchia_flood_2014_10min_Sim
+  sim_ras_path_2d: ~\Zenodo_Upload\Secchia_flood_2014_10min_Sim
 
   # Results output directory.
   res_output_dir_2d: Output_Files
@@ -70,7 +70,7 @@ model_2d:
   start_ts: 1
   
   # File path containing sensor locations.
-  sensor_locations: C:\Users\ay434\Documents\rasopt\examples\sensor_locations.csv
+  sensor_locations: sensor_locations.csv
 
   # Loss function.
   loss_func: RMSE
@@ -116,7 +116,7 @@ flag_1d:
   
 dir_1d:
   # Simulation directory.
-  sim_ras_path_1d: C:\Users\ay434\Documents\Secchia_River_1D_2014_Sim
+  sim_ras_path_1d: ~\Zenodo_Upload\Secchia_River_1D_2014_Sim
 
   # Results output directory.
   res_output_dir_1d: Output_Files
