@@ -7,9 +7,11 @@
 # Library imports.
 import os
 import re
+import sys
 import psutil
 import subprocess
 import h5py
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -24,6 +26,9 @@ from ax import RangeParameter, ParameterType
 from geojson import Feature, Polygon, FeatureCollection
 import osgeo.ogr as ogr
 import geojson
+import shapely.geometry
+import geopandas
+import rtree
 try:
     import rascontrol
 except:
@@ -36,7 +41,7 @@ except:
 
 
 # Local imports.
-from rasopt.Utilities import land_cover_utils
+from rasopt.Utilities import land_cover_utils, alter_files
 
 # ==========================================================================================
 # UTILITY FUNCTIONS
@@ -361,6 +366,34 @@ def inun_error(gt_depths, sim_depths, type, depth_cut=None):
         error = None
 
     return error
+
+
+def inun_far(gt_depths, sim_depths, depth_cut=None):
+    """
+    Compute the false alarm ratio of the model {FP / (TP + FP)}
+    :param gt_depths: Ground truth depths at a single time step. [Numpy array]
+    :param sim_depths: Simulation depths at a single time step. [Numpy array]
+    :param depth_cut: Depth over which a cell is considered inundated. [float in meters]
+    :return: Sensitivity of the model at that time step.
+    """
+    # Depth cutoff.
+    if depth_cut is None:
+        gt_inun = gt_depths
+        sim_inun = sim_depths
+    else:
+        # Booleans where inundation has occurred.
+        gt_inun = gt_depths > depth_cut
+        sim_inun = sim_depths > depth_cut
+
+    # Number of true positives.
+    TP = np.sum(gt_inun & sim_inun)
+
+    # False positives.
+    FP = np.sum(sim_inun & ~gt_inun)
+
+    # Sensitivity.
+    far = FP / (TP + FP)
+    return far
 
 
 def raster_value_at_location(locations, raster_path):
@@ -848,8 +881,8 @@ def extract_hec_breach_hydrograph(proj_path):
     return breach_flow, times
 
 
-def depth_geojson(pXX_hdf_fp, cell_fp_idx_path, facepoint_coord_path, depth_path, cell_coord_path, timestep=0,
-                  elevation=False, depths=None):
+def depth_geojson(pXX_hdf_fp, cell_fp_idx_path, facepoint_coord_path, depth_path, cell_coord_path,
+                  min_cell_elev_path, timestep=0, add_asl=False, depths=None, depth_cutoff=0.0):
     """
     Makes a geojson of the flood domain with water depth value in each polygon.
     :param pXX_hdf_fp: Path to pXX.hdf file that contains geometry and depth information.
@@ -858,7 +891,9 @@ def depth_geojson(pXX_hdf_fp, cell_fp_idx_path, facepoint_coord_path, depth_path
     :param depth_path: Path to depth data.
     :param cell_coord_path: Path to cell coordinates in depth data.
     :param timestep: Time step to grab, zero-indexed.
-    :param elevation: Set to true to add on the cell minimum elevation for ASL depth value.
+    :param add_asl: Add asl elevation to depth.
+    :param depths: User supplied depths to add to each polygon as a feature.
+    :param depth_cutoff: If set to a value, the geojson will discard polygons with depths less than the cutoff.
     :return: Geojson feature collection of polygons.
     """
     # Read in file.
@@ -869,35 +904,257 @@ def depth_geojson(pXX_hdf_fp, cell_fp_idx_path, facepoint_coord_path, depth_path
     facepoint_coords = f[facepoint_coord_path][:]
 
     # Cell minimum elevation.
-    cell_min_elev = f['Geometry/2D Flow Areas/Secchia_Panaro/Cells Minimum Elevation'][:]
-    cell_min_elev = np.nan_to_num(cell_min_elev, nan=-999)
+    cell_min_elev = f[min_cell_elev_path][:]
+    # cell_min_elev = np.nan_to_num(cell_min_elev, nan=-999)
 
     # Extract ground truth depths if not supplied in function call.
     if depths is None:
         gt_dep_df = extract_depths(pXX_hdf_fp, depth_path, cell_coord_path)
         depths = gt_dep_df.iloc[:, timestep + 2].to_numpy()
 
-    # Add on cell elevation.
-    if elevation is True:
-        depths = depths + cell_min_elev
+    if add_asl is True:
+        total_depths = depths + cell_min_elev
+    else:
+        total_depths = depths
+    total_depths = np.nan_to_num(total_depths, nan=-999)
 
     # fig, ax = plt.subplots(figsize=(7,7))
     feature_list = []
     for i in range(cell_fp_idx.shape[0]):
+        if depths[i] < depth_cutoff:
+            continue
+
         fp_idxs = cell_fp_idx[i, :]
         cell_fp_X = facepoint_coords[fp_idxs[fp_idxs >= 0], 0]
         cell_fp_Y = facepoint_coords[fp_idxs[fp_idxs >= 0], 1]
 
         # Zip into list of tuples.
         cell_poly = list(zip(cell_fp_X, cell_fp_Y))
+        if len(cell_poly) < 3:
+            continue
         mesh_poly = Polygon([cell_poly])
-        feature = Feature(geometry=mesh_poly, properties={"Depth": depths[i]})
+        # feature = Feature(geometry=mesh_poly, properties={"Depth": depths[i]})
+        feature = Feature(geometry=mesh_poly, properties={"Depth": total_depths[i]})
         feature_list.append(feature)
 
     # Create feature collection.
     feature_collection = FeatureCollection(feature_list)
 
     return feature_collection
+
+
+def terrain_depth(depth_geojson, template_raster_path, timestep, geo_dir, nodata=-999.0):
+    """
+    Compute the depth across the terrain by subtracting the terrain from the geojson depths.
+    :param depth_geojson: Geojson FeatureCollection of flood cell polygons where each polygon has a property "Depth".
+    :param timestep: The model time step the depth geojson corresponds to. This function saves the raster with the
+        timestep in the file name "mesh_raster_<timestep>.tif".
+    :param geo_dir: Directory where geo files are stored.
+    :param nodata: Value for nodata.
+    :return: Rasterized geojson as an array. Saves the rasterized array in the geo_dir directory specified.
+    """
+
+    # Save the geojson feature collection temporarily.
+    gjson_fp = os.path.join(geo_dir, 'mesh_gjson.geojson')
+    with open(gjson_fp, 'w') as gf:
+        geojson.dump(depth_geojson, gf)
+    gjson_ds = ogr.Open(gjson_fp)
+    gjson_layer = gjson_ds.GetLayer()
+    gj_xmin, gj_xmax, gj_ymin, gj_ymax = gjson_layer.GetExtent()
+
+    # Source raster properties.
+    with rasterio.open(template_raster_path) as ds:
+        terrain_array = ds.read(1)
+        gt = ds.transform
+        pixelSizeX = gt[0]
+        pixelSizeY = -gt[4]
+        t_xmin, t_ymin, t_xmax, t_ymax = ds.bounds
+        crs = ds.crs
+
+    # Geojson alignment with template raster extent.
+    del_ymax = t_ymax - gj_ymax
+    delc_ymax = (del_ymax // pixelSizeY) * pixelSizeY
+    ymax = t_ymax - delc_ymax
+
+    del_xmax = t_xmax - gj_xmax
+    delc_xmax = (del_xmax // pixelSizeX) * pixelSizeX
+    xmax = t_xmax - delc_xmax
+
+    del_ymin = gj_ymin - t_ymin
+    delc_ymin = (del_ymin // pixelSizeY) * pixelSizeY
+    ymin = t_ymin + delc_ymin
+
+    del_xmin = gj_xmin - t_xmin
+    delc_xmin = (del_xmin // pixelSizeX) * pixelSizeX
+    xmin = t_xmin + delc_xmin
+
+    # Target raster.
+    target_raster_fp = os.path.join(geo_dir, f'mesh_raster_{timestep}.tif')
+
+    # Rasterize the geojson feature collection.
+    layer_name = 'mesh_gjson'
+    property_name = 'Depth'
+
+    gdal_command = ("gdal_rasterize -at -l {} -a {} -tr {} {} -a_nodata {} -te {} {} {} {} -a_srs {} -ot Float32 "
+                    "-of GTiff {} {}".format(layer_name, property_name, pixelSizeX,
+                                             pixelSizeY, nodata, xmin, ymin, xmax,
+                                             ymax, crs, gjson_fp, target_raster_fp))
+
+    print(gdal_command)
+    subprocess.call(gdal_command, shell=True)
+
+
+    # Subtract the terrain raster from the depth raster.
+    with rasterio.open(target_raster_fp) as src1, rasterio.open(template_raster_path) as src2:
+        data1 = src1.read(1)
+
+        # extract metadata from the first raster
+        meta = src1.meta.copy()
+        data1[data1 == meta['nodata']] = np.nan
+
+        # read the window of the second raster with the same extent as the first raster
+        window = src2.window(*src1.bounds)
+
+        # read the data from the second raster with the same window as first raster
+        data2 = src2.read(1, window=window, boundless=True, fill_value=0)
+        # data2 = np.where(data2 == src2.nodata, 0, data2)
+
+        # calculate the difference
+        depth_array = data1 - data2
+
+        # Set values less than 0 to 0.
+        depth_array[depth_array < 0] = np.nan
+
+        # write the result to a new raster
+        depth_raster_fp = os.path.join(geo_dir, f'depth_raster_{timestep}.tif')
+        with rasterio.open(depth_raster_fp, 'w', **meta) as dst:
+            dst.write(depth_array, 1)
+
+    return depth_array, target_raster_fp
+
+
+def depth_at_locations(plan_fp, terrain_raster_fp:str, sensor_lats:list, sensor_lons:list, geo_dir:Path, polygon_index,
+                       feature_list, depth_cutoff=0.1):
+    """
+    Compute the depth at the terrain raster scale of provided sensor locations.
+    :param plan_fp: Path to plan file.
+    :param terrain_raster_fp: Path to terrain raster.
+    :param sensor_lats: List of sensor latitudes.
+    :param sensor_lons: List of sensor longitudes.
+    :param geo_dir: Path to geospatial directory.
+    :param polygon_index: Rtree polygon index of computational mesh.
+    :return:
+    """
+
+    # Get plan file paths.
+    plan_paths = alter_files.get_plan_file_paths(plan_fp)
+    depth_path = plan_paths["depth_path"]
+    cell_coord_path = plan_paths["cell_coord_path"]
+    cell_fp_idx_path = plan_paths["cell_facepoint_idx_path"]
+    min_cell_elev_path = plan_paths["min_cell_elev_path"]
+    facepoint_coord_path = plan_paths["facepoint_coord_path"]
+
+    # Read in file.
+    f = h5py.File(plan_fp, 'r+')
+
+    # Computational mesh tables.
+    cell_fp_idx = f[cell_fp_idx_path][:]
+    facepoint_coords = f[facepoint_coord_path][:]
+
+    # Extract ground truth depths if not supplied in function call.
+    gt_dep_df = extract_depths(plan_fp, depth_path, cell_coord_path)
+    depths = gt_dep_df.iloc[:, 2:].to_numpy()
+
+    # Add on the cell minimum elevations to get the total depth asl.
+    cell_min_elev = f[min_cell_elev_path][:]
+    cell_elevations = np.tile(cell_min_elev, (depths.shape[1], 1)).T
+    total_depths = depths + cell_elevations
+    total_depths = np.nan_to_num(total_depths, nan=-999)
+
+    # Sensor locations.
+    multi_point = shapely.geometry.MultiPoint([list(i) for i in zip(sensor_lats, sensor_lons)])
+
+    # Select polygons that contain sensor locations.
+    gjson_depths = {}
+    for point in multi_point.geoms:
+        # Use the index to find potential candidate polygons
+        point_tuple = (point.x, point.y)
+        possible_matches = list(polygon_index.intersection(point_tuple))
+
+        # Check which polygons contain the point
+        selected_polygons = [i for i in possible_matches if feature_list[i].contains(point)]
+        if selected_polygons:
+            gjson_depths[point_tuple] = total_depths[selected_polygons[0],:]
+        else:
+            gjson_depths[point_tuple] = []
+
+    # For each point that has a depth timeseries, query the corresponding terrain depth and subtract.
+    sensor_depths = gjson_depths.copy()
+    with rasterio.open(terrain_raster_fp, 'r') as src:
+        for point in multi_point.geoms:
+            point_tuple = (point.x, point.y)
+
+            if len(sensor_depths[point_tuple]) != 0:
+                try:
+                    # Sample the terrain elevation.
+                    dem_elev = [x[0] for x in src.sample([(point.x, point.y)])][0]
+
+                    # Subtract terrain elevation from flow depth.
+                    location_depths = np.array(sensor_depths[point_tuple]) - dem_elev
+                    location_depths[location_depths < 0] = 0.0
+                    sensor_depths[point_tuple] = location_depths
+                except Exception as e:
+                    print('Could not extract elevation for point: '.format(point))
+
+    return sensor_depths
+
+
+def index_polygons(plan_fp):
+    # Get plan file paths.
+    plan_paths = alter_files.get_plan_file_paths(plan_fp)
+    cell_fp_idx_path = plan_paths["cell_facepoint_idx_path"]
+    facepoint_coord_path = plan_paths["facepoint_coord_path"]
+
+    # Read in file.
+    f = h5py.File(plan_fp, 'r+')
+
+    cell_fp_idx = f[cell_fp_idx_path][:]
+    facepoint_coords = f[facepoint_coord_path][:]
+    idx = rtree.index.Index()
+
+    print('Indexing Polygons')
+    feature_list = []
+    for i in range(cell_fp_idx.shape[0]):
+        # Loading bar for sanity.
+        loading_bar(i, cell_fp_idx.shape[0])
+
+        fp_idxs = cell_fp_idx[i, :]
+        if len(fp_idxs[fp_idxs >= 0]) < 3:
+            continue
+        cell_fp_X = facepoint_coords[fp_idxs[fp_idxs >= 0], 0]
+        cell_fp_Y = facepoint_coords[fp_idxs[fp_idxs >= 0], 1]
+
+        # Zip into list of tuples.
+        cell_poly = list(zip(cell_fp_X, cell_fp_Y))
+        mesh_poly_shapely = shapely.geometry.Polygon(cell_poly)
+        feature_list.append(mesh_poly_shapely)
+
+        # Index polygon into rtree.
+        idx.insert(i, mesh_poly_shapely.bounds)
+
+    return idx, feature_list
+
+
+def geojson_to_multipolygon(depth_gjson):
+    polygons = []
+    for i in range(len(depth_gjson['features'])):
+        poly = shapely.geometry.Polygon(depth_gjson['features'][i]['geometry']['coordinates'][0])
+        # poly = shapely.geometry.Polygon(depth_geojson['features'][i]['geometry'])
+        polygons.append(poly)
+
+    multipolygon = shapely.geometry.MultiPolygon(polygons)
+
+    return multipolygon
 
 
 def rasterize_depth_geojson(depth_geojson, cell_width_X, cell_width_Y, timestep, geo_dir, nodata=-999.0):
@@ -983,9 +1240,6 @@ def rasterize_geojson(feature_collection, property_name, save_dir, raster_fname,
     # os.remove(gjson_fp)
 
     return raster_array, raster_fp
-
-
-# def rasterize_depth_geojson_to_dem()
 
 
 def add_satellite_uncertainty(raster_array, n_seeds, radius, uncertainty_type='Depth', max_probability=1,
@@ -1103,18 +1357,42 @@ def make_dt(date_str):
     return dt
 
 
-if __name__ == '__main__':
-    # a = np.array([1, 2, 3, 4, 5])
-    # b = np.array([[1, 2, 3, 4, 5],
-    #               [2, 3, 4, 5, 6],
-    #               [3, 4, 5, 6, 7],
-    #               [4, 5, 6, 7, 8],
-    #               [5, 6, 7, 8, 9,]])
-    # print(RMSE(a, b[:,0]))
+def loading_bar(current, total, bar_length=20):
+    progress = current / total
+    block = int(round(bar_length * progress))
 
-    # Test run of the 1D HEC-RAS model.
-    proj_path = r"C:\Users\ay434\Documents\Secchia_River_1D_2014_Sim\levee_breach_14.prj"
-    # proj_path = r"C:\Users\ay434\Documents\Secchia_flood_2014_Alter\Secchia_Panaro.prj"
-    proj_path = r"C:\Users\ay434\Documents\10_min_Runs\Secchia_flood_2014_10min_Sim\Secchia_Panaro.prj"
-    controller_version = "RAS507.HECRASCONTROLLER"
-    controller_hec_run(proj_path, controller_version)
+    bar = "[" + "=" * block + ">" + "-" * (bar_length - block) + "]"
+    percentage = round(progress * 100, 2)
+    status = f"{percentage}%"
+    line = bar + " " + status
+
+    sys.stdout.write("\r" + line)
+    sys.stdout.flush()
+
+
+if __name__ == '__main__':
+
+    # Configurations.
+    plan_fp = r"C:\Users\ay434\Documents\Flood_Sim\Panaro_Analysis_2023\Panaro\panaro-alex\paper-panaro.p02.hdf"
+
+    # Terrain raster file.
+    terrain_raster_fp = r"C:\Users\ay434\Documents\rasopt\analysis\geo_data\terrain-001.tif"
+
+    # Geospatial directory.
+    geo_dir = Path(r'C:\Users\ay434\Documents\rasopt\tests\geo_data')
+
+    # Sensor locations.
+    sens_loc_fp = geo_dir / 'linear_sensor_locations.shp'
+    sens_loc_ds = ogr.Open(str(sens_loc_fp))
+    sens_loc_layer = sens_loc_ds.GetLayer(0)
+    sensor_lats = [eval(sens_loc_layer.GetFeature(i).ExportToJson())["geometry"]["coordinates"][0] for i in
+                   range(sens_loc_layer.GetFeatureCount())]
+    sensor_lons = [eval(sens_loc_layer.GetFeature(i).ExportToJson())["geometry"]["coordinates"][1] for i in
+                   range(sens_loc_layer.GetFeatureCount())]
+
+    print(sensor_lats)
+    print(sensor_lons)
+
+    polygon_index, feature_list = index_polygons(plan_fp)
+    terrain_depths = depth_at_locations(plan_fp, terrain_raster_fp, sensor_lats, sensor_lons, geo_dir, polygon_index,
+                                        feature_list)
