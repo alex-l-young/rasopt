@@ -8,7 +8,21 @@
 import re
 import os
 import h5py
-from datetime import datetime
+from datetime import datetime, timedelta
+
+from rasopt.Utilities import utils
+
+# ====================================================================================================
+match_patterns = {
+    "cell_coord_path": "Geometry/2D Flow Areas/[^/]+/Cells Center Coordinate",
+    "depth_path": "Results/Unsteady/Output/Output Blocks/Base Output/Unsteady Time Series/2D Flow Areas/[^/]+/Depth",
+    "cal_table_path": "Geometry/Land Cover \(Manning's n\)/Calibration Table",
+    "cell_facepoint_idx_path": "Geometry/2D Flow Areas/[^/]+/Cells FacePoint Indexes",
+    "facepoint_coord_path": "Geometry/2D Flow Areas/[^/]+/FacePoints Coordinate",
+    "min_cell_elev_path": "Geometry/2D Flow Areas/[^/]+/Cells Minimum Elevation",
+    "structure_attributes": "Geometry/Structures/Attributes",
+    "structure_centerline_points": "Geometry/Structures/Centerline Points"
+}
 
 # ====================================================================================================
 def get_start_date(bXX_fp):
@@ -23,7 +37,11 @@ def get_start_date(bXX_fp):
             if 'Start Date/Time' in line:
                 dt = re.search('=\s(.*)', line)
                 start_date_str = dt.group(1)
-                start_dt = datetime.strptime(start_date_str, '%d%b%Y %H%M')
+                if "2400" in start_date_str:
+                    start_date_str = start_date_str.replace("2400", "0000")
+                    start_dt = datetime.strptime(start_date_str, '%d%b%Y %H%M') + timedelta(days=1)
+                else:
+                    start_dt = datetime.strptime(start_date_str, '%d%b%Y %H%M')
                 break
 
     return start_dt
@@ -221,6 +239,26 @@ def set_end_restart(bXX_fp):
 
     with open(bXX_fp, 'w') as f:
         f.writelines(lines)
+
+
+def number_of_timesteps(plan_fp):
+    """
+    Returns the number of timesteps.
+    :param plan_fp: Path to plan file.
+    :return: Number of time steps in simulation.
+    """
+    # Required plan file paths.
+    plan_paths = get_plan_file_paths(plan_fp)
+    depth_path = plan_paths["depth_path"]
+    cell_coord_path = plan_paths["cell_coord_path"]
+
+    # Extract depths.
+    depth_df = utils.extract_depths(plan_fp, depth_path, cell_coord_path)
+
+    # Count number of time steps. Subtract 2 to account for lat and lon columns.
+    Nt = depth_df.shape[1] - 2
+
+    return Nt
 
 
 def turn_on_restart_output(pXX_fp):
@@ -505,6 +543,21 @@ def edit_formation_time(pXX_fp, formation_time):
     print('FORMATION TIME LINE:', subbed)
 
 
+def get_active_breach_names(pXX_fp):
+    with open(pXX_fp, 'r') as f:
+        active_breaches = []
+        for line in f.readlines():
+            if 'Breach Loc' in line and 'True' in line:
+                # Define the regular expression pattern
+                pattern = re.compile(r'True,(.*)$')
+
+                # Search for the pattern in the line
+                match = pattern.search(line).group(1).strip()
+                active_breaches.append(match)
+
+    return active_breaches
+
+
 def sub_breach_string(fpath, line_match, sub_string, loc):
     """
     Sub a new value in at a location in the breach geometry string.
@@ -591,6 +644,24 @@ def edit_output_interval(pXX_fp, output_interval):
 
     with open(pXX_fp, 'w') as f:
         f.writelines(lines)
+
+
+def get_plan_file_paths(plan_fp):
+    # Save plan paths.
+    plan_paths = {}
+
+    def print_attrs(name, obj):
+        for key, pattern in match_patterns.items():
+            match = re.match(pattern, name)
+
+            if match:
+                # print(f'{key}:', match[0])
+                plan_paths[key] = match[0]
+
+    pf = h5py.File(plan_fp, 'r+')
+    pf.visititems(print_attrs)
+
+    return plan_paths
 
 
 if __name__ == '__main__':

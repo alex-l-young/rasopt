@@ -14,6 +14,8 @@ from skopt.space import Real
 from skopt.plots import plot_convergence, plot_gaussian_process
 from scipy.optimize import minimize, Bounds
 import matplotlib.pyplot as plt
+from rtree import index
+import pickle
 import os, sys
 import subprocess
 import shutil
@@ -22,7 +24,7 @@ import time
 
 # BoTorch Imports.
 import ax
-from ax import json_save
+from ax import json_save, Runner
 from ax.models.torch.botorch_modular.surrogate import Surrogate
 from ax.modelbridge.registry import Models
 from ax.modelbridge import get_sobol
@@ -32,6 +34,25 @@ from ax.core.observation import ObservationFeatures
 from botorch.models.gp_regression import SingleTaskGP
 from botorch.acquisition.monte_carlo import qNoisyExpectedImprovement
 from botorch.acquisition import qKnowledgeGradient
+
+from ax import (
+    ChoiceParameter,
+    ComparisonOp,
+    Experiment,
+    FixedParameter,
+    Metric,
+    Objective,
+    OptimizationConfig,
+    OrderConstraint,
+    OutcomeConstraint,
+    ParameterType,
+    RangeParameter,
+    SearchSpace,
+    SumConstraint,
+)
+from ax.modelbridge.registry import Models
+from ax.utils.notebook.plotting import init_notebook_plotting, render
+from ax.service.managed_loop import optimize
 
 # Append Flood_Sim directory to the current path.
 flood_sim_path = os.path.dirname(os.path.abspath(__file__))
@@ -142,6 +163,32 @@ class HecRasModel():
         print('GT RASTERS', self.gt_sat_rasters)
 
 
+class HecRasMetric(Metric):
+    def fetch_trial_data(self, trial):
+        records = []
+        for arm_name, arm in trial.arms_by_name.items():
+            params = arm.parameters
+
+            # Run HECRAS model.
+
+            records.append(
+                {
+                    "arm_name": arm_name,
+                    "metric_name": self.name,
+                    "trial_index": trial.index,
+                    # in practice, the mean and sem will be looked up based on trial metadata
+                    # but for this tutorial we will calculate them
+                    "mean": (params["x1"] + 2 * params["x2"] - 7) ** 2
+                    + (2 * params["x1"] + params["x2"] - 5) ** 2,
+                    "sem": 0.0,
+                }
+            )
+        return Data(df=pd.DataFrame.from_records(records))
+
+    def is_available_while_running(self) -> bool:
+        return True
+
+
 # Optimization class.
 class RASOpt():
 
@@ -210,6 +257,22 @@ class RASOpt():
         self.plan_hdf_fp_1d = os.path.join(sim_ras_path_1d, plan_fname_1d + '.hdf')
         self.geom_fp_1d = os.path.join(sim_ras_path_1d, geom_fname_1d)
 
+        # Index polygons and feature list. Open from saved objects if they already exist to bypass indexing.
+        # polygon_index_path = os.path.join(sim_ras_path_2d, 'rtree_index')
+        # feature_list_path = os.path.join(sim_ras_path_2d, 'feature_list.pkl')
+        # if os.path.exists(polygon_index_path) and os.path.exists(feature_list_path):
+        #     # Load feature list and polygon index if they exist.
+        #     self.polygon_index = index.Rtree('path/to/gridIndex')
+        #     with open(feature_list_path, "rb") as f:
+        #         self.feature_list = pickle.load(f)
+        # else:
+        #     self.polygon_index, self.feature_list = utils.index_polygons(self.plan_hdf_fp_2d)
+        #     # Save index and feature list.
+        #     with open(feature_list_path, "wb") as f:
+        #         self.feature_list = pickle.dump(self.feature_list, f)
+
+        self.polygon_index, self.feature_list = utils.index_polygons(self.plan_hdf_fp_2d)
+
         # Create single parameter bounds variable.
         self.param_bounds = self.param_bounds_2d + self.param_bounds_1d
         self.norm_bounds = utils.normalize_parameters(self.param_bounds)
@@ -232,14 +295,14 @@ class RASOpt():
         self.binary_timesteps = binary_timesteps
         self.gt_sat_rasters = gt_sat_rasters
 
+        # Run 1D model.
+        self.run_1D = run_1D
+
         # Check if output paths are created, if not, create them.
         if not os.path.isdir(self.res_output_path_2d):
             os.mkdir(self.res_output_path_2d)
-        if not os.path.isdir(self.res_output_path_1d):
+        if not os.path.isdir(self.res_output_path_1d) and self.run_1D is True:
             os.mkdir(self.res_output_path_1d)
-
-        # Run 1D model.
-        self.run_1D = run_1D
 
 
     def optimize_parameters(self):
@@ -250,6 +313,86 @@ class RASOpt():
 
 
     def _optimizer(self):
+
+        best_parameters, values, experiment, model = optimize(
+            parameters=[{"name": p.name, "type": "range", "bounds": [p.lower, p.upper]} for p in self.param_bounds],
+            experiment_name="hec_ras_opt",
+            objective_name="_run_with_loss",
+            evaluation_function=self._run_with_loss,
+            minimize=True,  # Optional, defaults to False.
+            total_trials=self.nevals,  # Optional.
+        )
+
+        return experiment
+
+
+    def _optimizer_dev(self):
+
+        # Create search space.
+        search_space = ax.SearchSpace(self.param_bounds)
+
+        # Create optimization config.
+        optimization_config = OptimizationConfig(
+            objective=Objective(
+                metric=Hartmann6Metric(name="hartmann6", param_names=param_names),
+                minimize=True,
+            )
+        )
+
+        # Define a runner.
+        class MyRunner(Runner):
+            def run(self, trial):
+                trial_metadata = {"name": str(trial.index)}
+                return trial_metadata
+
+        # Create an experiment.
+        exp = ax.core.Experiment(
+            name="hec_ras_opt",
+            search_space=search_space,
+            optimization_config=optimization_config,
+            runner=MyRunner(),
+        )
+
+        # Perform optimization.
+        NUM_SOBOL_TRIALS = self.nstarts
+        NUM_BOTORCH_TRIALS = self.nevals
+
+        # Sobol sampling.
+        sobol = Models.SOBOL(search_space=exp.search_space)
+
+        for i in range(NUM_SOBOL_TRIALS):
+            # Produce a GeneratorRun from the model, which contains proposed arm(s) and other metadata
+            generator_run = sobol.gen(n=1)
+            # Add generator run to a trial to make it part of the experiment and evaluate arm(s) in it
+            trial = exp.new_trial(generator_run=generator_run)
+            # Start trial run to evaluate arm(s) in the trial
+            trial.run()
+            # Mark trial as completed to record when a trial run is completed
+            # and enable fetching of data for metrics on the experiment
+            # (by default, trials must be completed before metrics can fetch their data,
+            # unless a metric is explicitly configured otherwise)
+            trial.mark_completed()
+
+        # BoTorch trials.
+        for i in range(NUM_BOTORCH_TRIALS):
+            print(
+                f"Running BO trial {i + NUM_SOBOL_TRIALS + 1}/{NUM_SOBOL_TRIALS + NUM_BOTORCH_TRIALS}..."
+            )
+            # Reinitialize GP+EI model at each step with updated data.
+            gpei = Models.BOTORCH_MODULAR(experiment=exp, data=exp.fetch_data())
+            generator_run = gpei.gen(n=1)
+            trial = exp.new_trial(generator_run=generator_run)
+            trial.run()
+            trial.mark_completed()
+
+        # Extract trial data.
+        trial_data = exp.fetch_trials_data([NUM_SOBOL_TRIALS + NUM_BOTORCH_TRIALS - 1])
+        result_df = trial_data.df
+
+        return result_df
+
+
+    def _optimizer_OLD(self):
         # # SKOPT BayesOpt
         # res = gp_minimize(self._run_with_loss,  # the function to minimize
         #                   # self.param_bounds,  # the bounds on each dimension of x
@@ -263,11 +406,11 @@ class RASOpt():
         # BoTorch BayesOpt
         # TODO: Handle parameters correctly.
         search_space_1 = ax.SearchSpace(self.param_bounds)
-        experiment_hec = ax.SimpleExperiment(
+        experiment_hec = ax.core.Experiment(
             name='hec_ras_opt',
             search_space=search_space_1,
-            evaluation_function=self._run_with_loss,
             objective_name='_run_with_loss',
+            minimize=True,  # Specify whether you want to minimize or maximize the objective
         )
 
         # TODO: Make sure that the loss function optimal at its maximum since this is what BoTorch searches for.
@@ -520,6 +663,68 @@ class RASOpt():
 
 
     def _compute_loss(self):
+
+        if self.comparison_type == 'Sensor':
+            # Locations.
+            sensor_lats = [i[0] for i in self.locs]
+            sensor_lons = [i[1] for i in self.locs]
+
+            # Get ground truth and simulation depths.
+            sim_depths = utils.depth_at_locations(self.plan_hdf_fp_2d, self.dem_fp, sensor_lats, sensor_lons,
+                                                  self.polygon_index, self.feature_list, depth_cutoff=self.depth_cut)
+            gt_depths = utils.depth_at_locations(self.gt_plan_df_fp_2d, self.dem_fp, sensor_lats, sensor_lons,
+                                                 self.polygon_index, self.feature_list, depth_cutoff=self.depth_cut)
+
+            # Compute loss for each of the locations using type I or type II comparison.
+            loss_vals = []
+            for loc, gt_depth_ts in gt_depths.items():
+                # If GT depth time series is empty, skip the location.
+                if len(gt_depth_ts) == 0:
+                    continue
+
+                # Simulation depth time series.
+                sim_depth_ts = sim_depths[loc]
+
+                # Start clip index to signal when the sensor has started to collect data.
+                # -1 to account for the data being 0-indexed.
+                start_clip_idx = int(self.start_ts * 60 / self.map_interval - 1)
+                gt_depth_ts = gt_depth_ts[start_clip_idx:]
+                sim_depth_ts = sim_depth_ts[start_clip_idx:]
+
+                # If both arrays are all zeros, skip.
+                if not np.any(sim_depth_ts) or not np.any(gt_depth_ts):
+                    continue
+
+                # Make arrays the same length.
+                end_clip_idx = min([len(gt_depth_ts), len(sim_depth_ts)])
+                gt_depth_ts = gt_depth_ts[:end_clip_idx]
+                sim_depth_ts = sim_depth_ts[:end_clip_idx]
+
+                # Compute the desired loss function.
+                if self.loss_func == 'MSE':
+                    loss_vals.append(utils.MSE(sim_depth_ts, gt_depth_ts))
+
+                elif self.loss_func == 'NNSE':
+                    normNSE = utils.NNSE(sim_depth_ts, gt_depth_ts)
+                    loss_vals.append(normNSE)
+
+                elif self.loss_func == 'RMSE':
+                    loss_vals.append(utils.RMSE(sim_depth_ts, gt_depth_ts))
+
+            # Compute mean of loss function values.
+            if loss_vals != []:
+                loss = np.mean(np.array(loss_vals))
+
+                # Negate the loss for maximization.
+                loss = loss
+            else:
+                raise Exception('No depth time series found.')
+                loss = None
+
+        return loss
+
+
+    def _compute_loss_OLD(self):
         """
         Computes the loss function on the simulated and observed depths.
         :return: Loss function value.

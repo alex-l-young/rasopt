@@ -7,6 +7,7 @@ from ax import RangeParameter, ParameterType
 import os, sys
 import pandas as pd
 import argparse
+from pathlib import Path
 
 # Local imports.
 from rasopt.Optimize import optimize1D2D
@@ -88,23 +89,8 @@ def main(cfg):
     cell_width_X = cfg['model_2d']['cell_width_X']
     cell_width_Y = cfg['model_2d']['cell_width_Y']
 
-    # # Uncertainty spatial correlation radius.
-    # radius = cfg['model_2d']['radius']
-    #
-    # # Depth error. The range of possible depth errors for a spurious cell in the uncertainty raster.
-    # depth_error = cfg['model_2d']['depth_error']
-
     # No data value.
     nodata = cfg['model_2d']['nodata']
-
-    # # Number of uncertainty seeds.
-    # n_seeds = cfg['model_2d']['n_seeds']
-    #
-    # # Uncertainty type. "Binary" or "Depth".
-    # uncertainty_type = cfg['model_2d']['uncertainty_type']
-    #
-    # # Maximum error probability for flipping cells to a spurious value.
-    # max_probability = cfg['model_2d']['max_probability']
 
     # <<< Optimization Configurations >>>
     # -----------------------------------
@@ -145,11 +131,12 @@ def main(cfg):
             # (4953264.49, 657720.27)]
 
     sensor_loc_fname = cfg['model_2d']['sensor_locations']
+    sensor_loc_fp = Path(sim_ras_path_2d) / sensor_loc_fname
     if comparison_type == 'Sensor':
-        loc_df = pd.read_csv(sensor_loc_fname, names=['Latitude', 'Longitude'])
+        loc_df = pd.read_csv(sensor_loc_fp, names=['Latitude', 'Longitude'])
         locs = list(zip(loc_df.Latitude, loc_df.Longitude))
     elif comparison_type == 'Sensor_Max':
-        loc_df = pd.read_csv(sensor_loc_fname, names=['cell_index'])
+        loc_df = pd.read_csv(sensor_loc_fp, names=['cell_index'])
         locs = list(loc_df.cell_index)
 
 
@@ -228,7 +215,8 @@ def main(cfg):
     # Configure the 1D and 2D models.
     configure_class = optimize1D2D.HecRasModel(sim_ras_path_2d, bdy_fname_2d, plan_fname_2d, n_ts, map_interval,
                      sim_ras_path_1d, bdy_fname_1d, plan_fname_1d, start_datetime_1d, end_datetime_1d, output_interval)
-    configure_class.model_1d_static_setup()
+    if run_1D is True:
+        configure_class.model_1d_static_setup()
     configure_class.model_2d_static_setup()
 
     if comparison_type == 'Binary':

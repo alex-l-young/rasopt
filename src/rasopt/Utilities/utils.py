@@ -225,6 +225,7 @@ def controller_hec_run(proj_path, controller_version):
     # Project.
     RAS_project = os.path.join(proj_path)
     hec.Project_Open(RAS_project)
+    print(RAS_project)
 
     # Handle versions differently.
     if '507' in controller_version:
@@ -370,11 +371,11 @@ def inun_error(gt_depths, sim_depths, type, depth_cut=None):
 
 def inun_far(gt_depths, sim_depths, depth_cut=None):
     """
-    Compute the false alarm ratio of the model {FP / (TP + FP)}
+    Compute the false alarm ratio of the model {FP / (TP + FN)}
     :param gt_depths: Ground truth depths at a single time step. [Numpy array]
     :param sim_depths: Simulation depths at a single time step. [Numpy array]
     :param depth_cut: Depth over which a cell is considered inundated. [float in meters]
-    :return: Sensitivity of the model at that time step.
+    :return: FAR of the model at that time step.
     """
     # Depth cutoff.
     if depth_cut is None:
@@ -391,9 +392,72 @@ def inun_far(gt_depths, sim_depths, depth_cut=None):
     # False positives.
     FP = np.sum(sim_inun & ~gt_inun)
 
-    # Sensitivity.
-    far = FP / (TP + FP)
+    # False negatives.
+    FN = np.sum(gt_inun & ~sim_inun)
+
+    # FAR.
+    far = FP / (TP + FN)
+
     return far
+
+
+def inun_csi(gt_depths, sim_depths, depth_cut=None):
+    """
+    Computes the critical success index.
+    :param gt_depths: Ground truth depths at a single time step. [Numpy array]
+    :param sim_depths: Simulation depths at a single time step. [Numpy array]
+    :param depth_cut: Depth over which a cell is considered inundated. [float in meters]
+    :return: CSI of the model at that time step.
+    """
+    # Depth cutoff.
+    if depth_cut is None:
+        gt_inun = gt_depths
+        sim_inun = sim_depths
+    else:
+        # Booleans where inundation has occurred.
+        gt_inun = gt_depths > depth_cut
+        sim_inun = sim_depths > depth_cut
+
+    # Number of true positives.
+    TP = np.sum(gt_inun & sim_inun)
+
+    # False positives.
+    FP = np.sum(sim_inun & ~gt_inun)
+
+    # False negatives.
+    FN = np.sum(gt_inun & ~sim_inun)
+
+    csi = TP / (TP + FP + FN)
+
+    return csi
+
+
+def inun_hr(gt_depths, sim_depths, depth_cut=None):
+    """
+    Computes the hit rate.
+    :param gt_depths: Ground truth depths at a single time step. [Numpy array]
+    :param sim_depths: Simulation depths at a single time step. [Numpy array]
+    :param depth_cut: Depth over which a cell is considered inundated. [float in meters]
+    :return: HR of the model at that time step.
+    """
+    # Depth cutoff.
+    if depth_cut is None:
+        gt_inun = gt_depths
+        sim_inun = sim_depths
+    else:
+        # Booleans where inundation has occurred.
+        gt_inun = gt_depths > depth_cut
+        sim_inun = sim_depths > depth_cut
+
+    # Number of true positives.
+    TP = np.sum(gt_inun & sim_inun)
+
+    # False negatives.
+    FN = np.sum(gt_inun & ~sim_inun)
+
+    hr = TP / (TP + FN)
+
+    return hr
 
 
 def raster_value_at_location(locations, raster_path):
@@ -1003,7 +1067,6 @@ def terrain_depth(depth_geojson, template_raster_path, timestep, geo_dir, nodata
     print(gdal_command)
     subprocess.call(gdal_command, shell=True)
 
-
     # Subtract the terrain raster from the depth raster.
     with rasterio.open(target_raster_fp) as src1, rasterio.open(template_raster_path) as src2:
         data1 = src1.read(1)
@@ -1017,7 +1080,6 @@ def terrain_depth(depth_geojson, template_raster_path, timestep, geo_dir, nodata
 
         # read the data from the second raster with the same window as first raster
         data2 = src2.read(1, window=window, boundless=True, fill_value=0)
-        # data2 = np.where(data2 == src2.nodata, 0, data2)
 
         # calculate the difference
         depth_array = data1 - data2
@@ -1033,7 +1095,7 @@ def terrain_depth(depth_geojson, template_raster_path, timestep, geo_dir, nodata
     return depth_array, target_raster_fp
 
 
-def depth_at_locations(plan_fp, terrain_raster_fp:str, sensor_lats:list, sensor_lons:list, geo_dir:Path, polygon_index,
+def depth_at_locations(plan_fp, terrain_raster_fp:str, sensor_lats:list, sensor_lons:list, polygon_index,
                        feature_list, depth_cutoff=0.1):
     """
     Compute the depth at the terrain raster scale of provided sensor locations.
@@ -1041,9 +1103,9 @@ def depth_at_locations(plan_fp, terrain_raster_fp:str, sensor_lats:list, sensor_
     :param terrain_raster_fp: Path to terrain raster.
     :param sensor_lats: List of sensor latitudes.
     :param sensor_lons: List of sensor longitudes.
-    :param geo_dir: Path to geospatial directory.
     :param polygon_index: Rtree polygon index of computational mesh.
-    :return:
+    :return: Dictionary with tuple (longitude, latitude) as key and depth time series as value.
+        Locations that fall outside the domain are assinged empty lists.
     """
 
     # Get plan file paths.
@@ -1072,7 +1134,7 @@ def depth_at_locations(plan_fp, terrain_raster_fp:str, sensor_lats:list, sensor_
     total_depths = np.nan_to_num(total_depths, nan=-999)
 
     # Sensor locations.
-    multi_point = shapely.geometry.MultiPoint([list(i) for i in zip(sensor_lats, sensor_lons)])
+    multi_point = shapely.geometry.MultiPoint([list(i) for i in zip(sensor_lons, sensor_lats)])
 
     # Select polygons that contain sensor locations.
     gjson_depths = {}
@@ -1109,7 +1171,7 @@ def depth_at_locations(plan_fp, terrain_raster_fp:str, sensor_lats:list, sensor_
     return sensor_depths
 
 
-def index_polygons(plan_fp):
+def index_polygons(plan_fp, save_fp=None):
     # Get plan file paths.
     plan_paths = alter_files.get_plan_file_paths(plan_fp)
     cell_fp_idx_path = plan_paths["cell_facepoint_idx_path"]
@@ -1120,7 +1182,11 @@ def index_polygons(plan_fp):
 
     cell_fp_idx = f[cell_fp_idx_path][:]
     facepoint_coords = f[facepoint_coord_path][:]
-    idx = rtree.index.Index()
+
+    if save_fp:
+        idx = rtree.index.Index(save_fp)
+    else:
+        idx = rtree.index.Index()
 
     print('Indexing Polygons')
     feature_list = []
@@ -1141,6 +1207,9 @@ def index_polygons(plan_fp):
 
         # Index polygon into rtree.
         idx.insert(i, mesh_poly_shapely.bounds)
+
+    if save_fp:
+        idx.close()
 
     return idx, feature_list
 
@@ -1240,6 +1309,81 @@ def rasterize_geojson(feature_collection, property_name, save_dir, raster_fname,
     # os.remove(gjson_fp)
 
     return raster_array, raster_fp
+
+
+def geojson_with_values(pXX_hdf_fp, cell_fp_idx_path, facepoint_coord_path, cell_coord_path, values, value_coords):
+    """
+    Makes a geojson of the flood domain with water depth value in each polygon.
+    :param pXX_hdf_fp: Path to pXX.hdf file that contains geometry and depth information.
+    :param cell_fp_idx_path: Path to the Cells FacePoint Indexes data.
+    :param facepoint_coord_path: Path to the FacePoints Coordinate data.
+    :param cell_coord_path: Path to cell coordinates in depth data.
+    :param values: Values to add into geojson cells. nx1 numpy array.
+    :param value_coords: Coordinates of the values that correspond to cell coordinates as nx2 numpy array. [lon, lat]
+    :return: Geojson feature collection of polygons.
+    """
+    # Read in file.
+    print(pXX_hdf_fp)
+    f = h5py.File(pXX_hdf_fp, 'r+')
+
+    cell_fp_idx = f[cell_fp_idx_path][:]
+    facepoint_coords = f[facepoint_coord_path][:]
+
+    # Get cell coordinates.
+    coords = f[cell_coord_path][:]
+
+    # Get indices where coords overlaps with value_coords.
+    shared_idx = np.where((coords[:, None] == value_coords).all(-1).any(-1))[0]
+
+    # Pare down the cell_fp_idx and facepoint_coords.
+    cell_fp_idx = cell_fp_idx[shared_idx,:]
+
+    feature_list = []
+    for i in range(cell_fp_idx.shape[0]):
+        # Extract cell facepoint coordinates.
+        fp_idxs = cell_fp_idx[i, :]
+        cell_fp_X = facepoint_coords[fp_idxs[fp_idxs >= 0], 0]
+        cell_fp_Y = facepoint_coords[fp_idxs[fp_idxs >= 0], 1]
+
+        # Zip into list of tuples.
+        cell_poly = list(zip(cell_fp_X, cell_fp_Y))
+        if len(cell_poly) < 3:
+            continue
+        mesh_poly = Polygon([cell_poly])
+        feature = Feature(geometry=mesh_poly, properties={"Value": values[i]})
+        feature_list.append(feature)
+
+    # Create feature collection.
+    feature_collection = FeatureCollection(feature_list)
+
+    return feature_collection
+
+
+def get_breach_coordinates(plan_fp):
+    """
+    Gets the mean coordinates of the centerline of the breach.
+    :param plan_fp: Path to plan file.
+    :return: Dictionary {breach_name: np.array([longitude, latitude])}
+    """
+    # Get plan file paths.
+    plan_paths = alter_files.get_plan_file_paths(plan_fp)
+    structure_attributes = plan_paths["structure_attributes"]
+    structure_centerline_points = plan_paths["structure_centerline_points"]
+
+    # Read in file.
+    f = h5py.File(plan_fp, 'r+')
+
+    breach_names = [i[4].decode('utf-8') for i in f[structure_attributes][:]]
+    breach_centerlines = f[structure_centerline_points][:]
+
+    # Get centerline coordinates for each breach.
+    breach_coord_dict = {}
+    for i, breach_name in enumerate(breach_names):
+        coords = breach_centerlines[i * 2:(i * 2) + 2, :]
+        coords = np.mean(coords, axis=0)
+        breach_coord_dict[breach_name] = coords
+
+    return breach_coord_dict
 
 
 def add_satellite_uncertainty(raster_array, n_seeds, radius, uncertainty_type='Depth', max_probability=1,
@@ -1372,27 +1516,22 @@ def loading_bar(current, total, bar_length=20):
 
 if __name__ == '__main__':
 
-    # Configurations.
-    plan_fp = r"C:\Users\ay434\Documents\Flood_Sim\Panaro_Analysis_2023\Panaro\panaro-alex\paper-panaro.p02.hdf"
+    # Index Polygons.
+    plan_dir = Path(
+        r"C:\Users\ay434\Box\Research\Flood_Sim_Materials\WRR_Paper\Revisions_1\Analysis\Secchia\Extent_Mapping\geo_dir")
+    plan_fname = "Secchia_Panaro.p23_0.03.hdf"
+    plan_fp = plan_dir / plan_fname
 
-    # Terrain raster file.
-    terrain_raster_fp = r"C:\Users\ay434\Documents\rasopt\analysis\geo_data\terrain-001.tif"
+    index_fp = str(plan_dir) + r"\polygon_index"
+    feature_list_fp = plan_dir / "feature_list.pkl"
+    # If index already exists, load it. Otherwise, index plan file.
+    if Path(index_fp + '.idx').exists() and Path(feature_list_fp).exists():
+        polygon_index = rtree.index.Index(index_fp)
+        with open(feature_list_fp, 'rb') as f:
+            feature_list = pickle.load(f)
+    else:
+        polygon_index, feature_list = utils.index_polygons(plan_fp, save_fp=index_fp)
+        with open(feature_list_fp, 'wb') as f:
+            pickle.dump(feature_list, f)
 
-    # Geospatial directory.
-    geo_dir = Path(r'C:\Users\ay434\Documents\rasopt\tests\geo_data')
-
-    # Sensor locations.
-    sens_loc_fp = geo_dir / 'linear_sensor_locations.shp'
-    sens_loc_ds = ogr.Open(str(sens_loc_fp))
-    sens_loc_layer = sens_loc_ds.GetLayer(0)
-    sensor_lats = [eval(sens_loc_layer.GetFeature(i).ExportToJson())["geometry"]["coordinates"][0] for i in
-                   range(sens_loc_layer.GetFeatureCount())]
-    sensor_lons = [eval(sens_loc_layer.GetFeature(i).ExportToJson())["geometry"]["coordinates"][1] for i in
-                   range(sens_loc_layer.GetFeatureCount())]
-
-    print(sensor_lats)
-    print(sensor_lons)
-
-    polygon_index, feature_list = index_polygons(plan_fp)
-    terrain_depths = depth_at_locations(plan_fp, terrain_raster_fp, sensor_lats, sensor_lons, geo_dir, polygon_index,
-                                        feature_list)
+    x = 1
