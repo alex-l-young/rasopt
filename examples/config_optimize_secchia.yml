@@ -1,0 +1,164 @@
+# Configuration file for 1D-2D optimization.
+
+# Optimization.
+optim:
+  # Number of initializations.
+  nstarts: 5
+
+  # Number of evaluations.
+  nevals: 50
+
+  # Number of hours to run model.
+  n_ts: 43
+
+  # Mapping interval in minutes.
+  map_interval: 10
+
+# Model files.
+dir_2d:
+  # Ground truth directory.
+  gt_ras_path_2d: ~\Secchia_flood_2014_10min_Orig_GT
+
+  # Simulation directory.
+  sim_ras_path_2d: ~\Secchia_flood_2014_10min_Sim
+
+  # Results output directory.
+  res_output_dir_2d: Output_Files
+
+  # Project file name.
+  prj_fname_2d: Secchia_Panaro.prj
+
+  # Boundary condition file name.
+  bdy_fname_2d: Secchia_Panaro.b23
+
+  # Unstead flow file name.
+  flow_fname_2d: Secchia_Panaro.u01
+
+  # Plan HDF file name.
+  plan_hdf_fname_2d: Secchia_Panaro.p23.hdf
+
+  # Plan file name.
+  plan_fname_2d: Secchia_Panaro.p23
+
+  # Geometry HDF file name.
+  geom_fname_2d: Secchia_Panaro.g23.hdf
+
+  # DEM File path.
+  dem_fname: DTM_1m.tif
+
+  # Cell coordinate path.
+  cell_coord_path: Geometry/2D Flow Areas/Secchia_Panaro/Cells Center Coordinate
+
+  # Water depths path.
+  depth_path: Results/Unsteady/Output/Output Blocks/Base Output/Unsteady Time Series/2D Flow Areas/Secchia_Panaro/Depth
+
+  # Manning's n calibration table path.
+  cal_table_path: Geometry/Land Cover (Manning's n)/Calibration Table
+
+  # Cell facepoint index path.
+  cell_facepoint_idx_path: Geometry/2D Flow Areas/Secchia_Panaro/Cells FacePoint Indexes
+
+  # Facepoint coordinate path.
+  facepoint_coord_path: Geometry/2D Flow Areas/Secchia_Panaro/FacePoints Coordinate
+
+model_2d:
+  # Comparison Type "Binary" or "Sensor". Binary is currently unsupported.
+  comparison_type: Sensor
+
+  # SENSOR CALIBRATION
+  # Number of hours after start when sensors are placed.
+  start_ts: 1
+  
+  # File path containing sensor locations.
+  sensor_locations: secchia_max_sensors_43hr.csv
+
+  # Loss function.
+  loss_func: RMSE
+
+  # BINARY CALIBRATION
+
+  # Time steps at which to do binary comparison.
+  binary_timesteps:
+    - 120
+
+  # Binary comparison depth cutoff.
+  depth_cutoff: .1 # meters.
+
+  # Raster cell dimensions in units of the coordinate system.
+  cell_width_X: 100
+  cell_width_Y: 100
+
+  # No data value.
+  nodata: -999.0
+  
+param_2d:
+  # Parameter names that will be optimized. Must match the names in the model.
+  param_names_2d:
+    - campagna
+    - centri abitati
+    - canali
+
+  # Parameter bounds. put "_g" after land roughness parameters.
+  range_param_names_2d:
+    - campagna_n_g
+    - centri abitati_n_g
+    - canali_n_g
+
+  param_lower_2d:
+    - 0.03
+    - 0.12
+    - 0.01
+
+  param_upper_2d:
+    - 0.11
+    - 0.28
+    - 0.06
+
+# 1D Model.
+flag_1d:
+  run_1D: False
+  
+dir_1d:
+  # Simulation directory.
+  sim_ras_path_1d: ~\Zenodo_Upload\Secchia_River_1D_2014_Sim
+
+  # Results output directory.
+  res_output_dir_1d: Output_Files
+
+  # Project file name.
+  prj_fname_1d: levee_breach_14.prj
+
+  # Boundary condition file name.
+  bdy_fname_1d: levee_breach_14.b01
+
+  # Unstead flow file name.
+  flow_fname_1d: levee_breach_14.u01
+
+  # Plan HDF file name.
+  plan_hdf_fname_1d: levee_breach_14.p01.hdf
+
+  # Plan file name.
+  plan_fname_1d: levee_breach_14.p01
+
+  # Geometry HDF file name.
+  geom_fname_1d: levee_breach_14.g01.hdf
+
+  # <<< HDF Paths >>>
+  # -----------------
+
+  # Path to breach hydrograph.
+  hydrograph_path: Results/Unsteady/Output/Output Blocks/Base Output/Unsteady Time Series/Lateral Structures/Secchia cassa_confine_er 41200.00/Structure Variables
+
+model_1d:
+  # Start Datetime. Formatted as "21DEC2013,2400"
+  start_datetime_1d: 21DEC2013,2400
+
+  # End Datetime. Formatted as "21DEC2013,2400"
+  end_datetime_1d: 03FEB2014,2350
+
+  # Output interval for breach hydrograph in minutes.
+  output_interval: 10
+
+  # Breach start Formatted as "19JAN2014 0240"
+  breach_start: 19JAN2014 0240
+
