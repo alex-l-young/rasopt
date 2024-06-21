@@ -1,14 +1,14 @@
 # Optimizaton Instructions
 
 Optimization requirements:
-- Configuration file (config_1D2D.yml is provided as a template).
+- Configuration file (config_optimize_secchia.yml is provided as a template).
 - 2D HEC-RAS instantiation.
 - 1D HEC-RAS instantiaton if running the 1D portion of the optimization.
 
 ## Configuration file
 
 The configuration file contains the configurations that are required by the optimization script. These are commented 
-in the file "config_1D2D.yml" and will need alteration if you plan to change the model directories or optimization 
+in the file "config_optimize_secchia.yml" and will need alteration if you plan to change the model directories or optimization 
 settings. The most common variables that need to be changed are listed below.
 
 #### optim
